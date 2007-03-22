@@ -1,0 +1,36 @@
+#!/bin/sh
+
+set -e
+
+NEKODIR=/usr/lib/neko
+
+ENABLE2=/usr/sbin/a2enmod
+
+MODCONF=/usr/sbin/apache-modconf
+MSG="Module neko installed, run /etc/init.d/apache force-reload to enable."
+
+case "$1" in
+    configure)
+        ## Register with Apache 2.2, if present.
+        if [ -x $ENABLE2 ]; then
+            ## Enable neko module.
+            $ENABLE2 neko
+        fi
+        ## Register with Apache 1.3, if present.
+        if [ -x $MODCONF ]; then
+            for flavour in apache apache-perl apache-ssl; do
+                if [ -f /etc/$flavour/modules.conf ]; then
+                    $MODCONF $flavour enable mod_neko && echo $MSG
+                fi
+            done
+        fi
+        ;;
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+    *)
+        echo "postinst called with unknown argument \`$1'" >&2
+esac
+
+#DEBHELPER#
+
+exit 0

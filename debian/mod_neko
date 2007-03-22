@@ -1,0 +1,5 @@
+<IfModule mod_neko.c>
+  LoadModule neko_module /usr/lib/neko/mod_neko.ndll
+  AddHandler neko-handler .n
+  DirectoryIndex index.n
+</IfModule>

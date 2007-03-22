@@ -1,0 +1,4 @@
+25-strip-and-rpath
+50-include-and-link
+50-embed-endianess
+75-kfreebsd-defines

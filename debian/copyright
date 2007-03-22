@@ -1,0 +1,23 @@
+This is the Debian packaging of the Neko virtual machine, compiled by
+Jens Peter Secher <jps@debian.org>.
+
+The original source was downloaded from http://nekovm.org.
+
+---[ Neko License begin ]---
+
+  Copyright (C) 2005-206 Motion-Twin
+
+  This library is free software; you can redistribute it and/or
+  modify it under the terms of the GNU Lesser General Public				
+  License as published by the Free Software Foundation; either				
+  version 2.1 of the License, or (at your option) any later version.		
+  
+  This library is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of			
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU		
+  Lesser General Public License or the LICENSE file for more details.		
+
+---[ Neko License end ]---
+
+The full GNU Lesser General Public License is located in the file
+/usr/share/common-licenses/LGPL on a Debian system.

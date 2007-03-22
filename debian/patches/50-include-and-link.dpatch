@@ -1,0 +1,65 @@
+#! /bin/sh /usr/share/dpatch/dpatch-run
+## 50-include-and-link.dpatch by Jens Peter Secher <jps@debian.org>
+##
+## DP: Use the right include directories, shared libraries and cflags.
+## DP: Use -rpath to force search in /usr/lib/neko.
+
+@DPATCH@
+diff -urNad neko-1.5.3~/src/tools/install.neko neko-1.5.3/src/tools/install.neko
+--- neko-1.5.3~/src/tools/install.neko	2007-03-22 20:48:42.000000000 +0100
++++ neko-1.5.3/src/tools/install.neko	2007-03-22 20:58:40.000000000 +0100
+@@ -53,7 +53,6 @@
+ 		src => $array("mysql"),
+ 		inc => "mysql.h",
+ 		incname => "MySQL 4.+"
+-		lib => "libmysqlclient.a",
+ 		lparams => "-lz"
+ 	},
+ 	regexp => {
+@@ -78,11 +77,11 @@
+ 
+ // PLATFORM
+ 
+-cflags = "-O3 -fPIC";
++cflags = "-O3 -DEAPI -fPIC $(pkg-config --cflags apr-1)";
+ cc = getenv("CC");
+ if( cc == null ) cc = "gcc";
+ linkcmd = switch system { "BSD" => "ld" default => cc };
+-linkoptions = switch system { "Mac" => "-bundle -undefined dynamic_lookup -L../../bin -lneko" default => "-shared -L../../bin -lneko" };
++linkoptions = switch system { "Mac" => "-bundle -undefined dynamic_lookup -L../../bin -lneko" default => "-shared -L../../bin -lneko -Wl,-rpath -Wl,/usr/lib/neko" };
+ nekovm = switch system { "Windows" => "..\\bin\\neko" default => "../bin/neko" };
+ ranlib = function(l) { }
+ 
+@@ -107,31 +106,18 @@
+ search_includes = function(ism2) {
+ 	return $array(
+ 		"/usr/include",
+-		if( ism2 ) "/usr/local/apache2/include" else "/usr/local/apache/include",
+ 		if( ism2 ) "/usr/include/apache2" else "/usr/apache/include",
+-		if( ism2 ) "/opt/local/apache2/include" else "/opt/local/include/apache",
+ 		if( ism2 ) "" else "/usr/include/apache-1.3",
+-		"/usr/local/include/mysql",
+ 		"/usr/include/mysql",
+-		"/usr/local/include",
+ 		"/usr/include/apr-1",
++		"/usr/include/apr-1.0",
+ 		"/usr/include/apr-0",
+-		"/usr/local/include/apr-1",
+-		"/usr/local/include/apr-0",
+-		"/opt/local/include",
+-		"/opt/local/include/apr-1",
+-		"/opt/local/include/apr-0",
+-		"/opt/local/include/mysql",
+ 	);
+ }
+ 
+ libraries = $array(
+ 	"../../libs/include",
+ 	"/usr/lib",
+-	"/usr/local/lib",
+-	"/usr/local/lib/mysql",
+-	"/opt/local/lib",
+-	"/opt/local/lib/mysql",
+ );
+ 
+ exec = function(cmd) {

@@ -1,0 +1,50 @@
+#!/usr/bin/make -f
+# debian/rules for neko.
+
+# Compile options
+cflags := -Wall -fPIC -fomit-frame-pointer -I vm -DCOMPACT_TABLE -g
+ifeq (,$(findstring noopt,$(DEB_BUILD_OPTIONS)))
+	cflags += -O3
+else
+	cflags += -O0
+endif
+
+# Use dpatch
+include /usr/share/dpatch/dpatch.make
+
+build: patch-stamp build-stamp
+build-stamp: 
+	dh_testdir
+	make CFLAGS="$(cflags)"
+	touch $@
+
+binary-indep: build-stamp
+
+binary-arch: build-stamp
+	dh_testdir
+	dh_testroot
+	dh_install
+	mkdir -p debian/neko/usr/share/lintian/overrides
+	cp debian/neko.lintian-overrides debian/neko/usr/share/lintian/overrides/neko
+	dh_installdocs
+	dh_installchangelogs CHANGES
+	dh_installman debian/neko.1 debian/nekoc.1 debian/nekotools.1
+	dh_compress
+	dh_fixperms
+	dh_installdeb
+	dh_shlibdeps
+	dh_gencontrol
+	dh_md5sums
+	dh_builddeb
+
+binary: binary-indep binary-arch
+
+clean: clean-patched unpatch
+clean-patched:
+	dh_testdir
+	dh_testroot
+	-rm -f *-stamp
+	make clean
+	dh_clean
+
+.PHONY: binary binary-indep binary-arch build clean clean-patched

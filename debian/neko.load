@@ -1,0 +1,1 @@
+LoadModule neko_module /usr/lib/neko/mod_neko2.ndll
