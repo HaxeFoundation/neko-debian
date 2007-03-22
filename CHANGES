@@ -1,0 +1,149 @@
+2007-01-28 : 1.5.3
+	minor fixes in mod_neko multipart and POST data handling
+	fixed $objremove result (was always true)
+	fixed one-last-bug when using more-than-five-arguments method call return value
+	fixed bug in dev webserver when accessing a directory
+	added xcross support
+	fixed bug with $setresolver in bytecode interpreter
+	changed bootable vm implementation (easier, allow compressed bin)
+	added .mode in sys_stat
+	change in $version format
+
+2006-11-22 : 1.5.2
+	fixed std math_pow float
+	minor thread cleanup
+	added MySQL5.ndll for Windows
+	fields hash cache is now global (instead of per-thread)
+	socket_select retry on EINTR
+	fixed under-second lock timeout for Linux/OSX
+	added socket_poll for Linux/OSX (emulate with select() on Windows)
+	fixed compilation bug when accessing 'this' in arguments and more than 5 args
+	fixed string_split with empty string (was causing infinite loop)
+	fixes in more-than-five-arguments-calls
+	added $varargs
+	
+2006-10-29 : 1.5
+	neko web server : get_client_header is now case-insensitive
+	std : new thread and lock api
+	neko : when run from commandline, SEGV on Linux are turned into exceptions
+	+ added mod_neko2 error if used with Apache 2.0.x
+
+2006-10-09 : 1.4.5
+	sqlite : added BOOL handling
+	jit : added mmap support (for execution protection)
+	jit : fixed bug when unsupported operation exception
+	vm : fixed bug in debug infos reading when nfiles > 255
+	vm : fixed bug in interp -> jit call
+	vm : default NEKOPATH is now the same on OSX/Linux
+	vm : optimized debug infos runtime memory size
+	std : added misc.c (float & double bytes manipulations + gc/vm functions)
+	std : fixed buf in sys_read_dir on windows (directory not closed correctly)
+	std : added sys_getch, sys_get_pid
+	std : fixed socket_host (was returning the same as socket_peer)
+	std : improved performances of serialize/unserialize
+	allowed break & continues in try/catch if they don't break outside
+	nekoml : fixed bug in lexer allocating too bug memory when small reads
+	nekotools : bugfixes in server, added static file streaming
+	nekotools : fixed boot for universal binaries
+	mod_neko : minor updates for better memory handling
+	mod_neko : use soft timeout for Apache 1.3
+
+2006-08-02 : 1.4
+	std : added a SO_REUSEADDR before socket_bind (except windows)
+	nekoc/nekovm : allowed more than 127 filenames in debug infos
+	nekotools server : added -rewrite for mod_rewrite'style urls
+	added zlib wrapper
+	mod_neko for apache 2.0
+	added sqlite wrapper
+	std : fixed socket_set_timeout (changed unit from millisec to seconds)
+	std : fixed math_pow (integer overflow) , fixed readdir (missing closedir on Linux)
+	added PPC registers
+	neko.h : added NEKO_* OS/CPU flags
+	added JIT for x86
+	vm : (int mod 0) is now an exception (and not NaN)
+	neko.h : added kind_import and kind_export to share abstracts between libraries
+	std : handle signals in socket send and recv
+	allowed OSX universal build
+	added $setresolver for unknown object field handling
+
+2006-05-11 : 1.3
+	neko : fixed endianness bug needed to boot, exported neko_is_big_endian
+	neko : fixed bug on Linux x86 gcc with object operators (eax get overwritten)
+	neko : fixed bug : error when __string or __compare does not exist
+	neko : allowed runtime printer redirection (+ added std@print_redirect)
+	neko : defined a default NEKOPATH when not specified (less configuration)
+	neko : fixed int32 calculus bug (need_32_bits macro)
+	neko : fixed calls with a lot of arguments (some cases were failing)
+	neko : fixed preservation of 'this' through tailcall, if changed inside the call
+	neko : added unary operator minus parsing
+	neko : fixed error reporting of unclosed parenthesis
+	nekoml : added Net core module for sockets
+	nekoml : when catching Neko errors, wrap them using Neko_error constructor
+	std : supported serialization of C primitives and __serialize/__unserialize overrides
+	added nekotools (merged nekoboot and neko webserver)
+	std : fixed math_round, fixed math docs
+	std : fixed bug in utf8_resize, utf8_get and utf8_iter.
+	regexp : added regexp_new_options for matching options and regexp_replace_fun
+	regexp : fixed invalid matched length when not index 0
+	added some benchmarks in src/benchs
+	neko : fixed $ablit and $sblit (when used with same array/string)
+	neko : fixed multithread win32 support
+	mod_neko : changed Content-Type handling for POST data
+	std : added blocking sockets support
+	std : changed sys_time to sys_cpu_time, added sys_time (local time).
+	std : fixed put_env on Linux (GC issue)
+	cleanup of some stuff needed by experimental JIT
+	std : added memory module
+	
+2006-01-09 : 1.2
+	nekoc:
+		added linker : provide linked versions of neko & nekoml compilers
+		added tail calls optimization
+	nekoml:
+		little improved nekoml->neko patterns generator
+	libs:
+		added md5 digest , utf8 api and base_encode/base_decode in std
+		some changes in mod_neko api
+		mysql api now threat tinyint(1) as booleans
+		improved xml parser : support for doctype
+		some fixes for OSX and C++ compilation
+	neko:
+		renamed 'nekovm' to 'neko'
+		experimental jit support
+		object prototypes
+		moved args from builtin ($args) to loader ($loader.args)
+		makeboot can create standalone binaries
+		runtime errors on :
+			- calls with invalid number of arguments
+			- field accesses of not-an-object
+			- binary operations on invalid types
+			- array accesses on not-an-array and not-an-object
+	license change : from GPL to LGPL	
+
+2005-11-10 : 1.1
+	vm : 
+		ports PPC (big endian) and AMD64
+		added stack conservation check at bytecode loadtime : faster VM runtime
+		some more opcodes for better speed
+		added exception and call stack traces
+		added debug informations for bytecode
+		added dispatch tables (for integer switchs)
+		tuned GC usage
+		reorganized VM apis
+	neko:
+		added labels in the language specification 
+		added $goto and $apply 
+		added switchs
+		added documentation generator
+	nekoml:
+		added NekoML
+		bootstrapped the language (no more need for ocaml)
+	libs:
+		rewrote and completed standard library
+		added generated documentation
+
+2005-08-17 : 1.0
+	compiler in ocaml
+	virtual machine
+	mod_neko
+	some small libraries
