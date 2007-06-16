@@ -6,9 +6,21 @@
 
 @DPATCH@
 diff -urNad neko-1.5.3~/src/tools/install.neko neko-1.5.3/src/tools/install.neko
---- neko-1.5.3~/src/tools/install.neko	2007-03-22 20:48:42.000000000 +0100
-+++ neko-1.5.3/src/tools/install.neko	2007-03-22 20:58:40.000000000 +0100
-@@ -53,7 +53,6 @@
+--- neko-1.5.3~/src/tools/install.neko	2007-06-16 20:58:05.000000000 +0200
++++ neko-1.5.3/src/tools/install.neko	2007-06-16 21:01:05.000000000 +0200
+@@ -39,11 +39,6 @@
+ // LIBS DATAS
+ 
+ libs = {
+-	mod_neko => {
+-		src => $array("mod_neko","cgi"),
+-		inc => "httpd.h",
+-		incname => "Apache 1.3.x"
+-	},
+ 	mod_neko2 => {
+ 		src => $array("mod_neko","cgi"),
+ 		inc => $array("httpd.h","apr.h"),
+@@ -53,7 +48,6 @@
  		src => $array("mysql"),
  		inc => "mysql.h",
  		incname => "MySQL 4.+"
@@ -16,7 +28,7 @@ diff -urNad neko-1.5.3~/src/tools/install.neko neko-1.5.3/src/tools/install.neko
  		lparams => "-lz"
  	},
  	regexp => {
-@@ -78,11 +77,11 @@
+@@ -78,11 +72,11 @@
  
  // PLATFORM
  
@@ -30,26 +42,27 @@ diff -urNad neko-1.5.3~/src/tools/install.neko neko-1.5.3/src/tools/install.neko
  nekovm = switch system { "Windows" => "..\\bin\\neko" default => "../bin/neko" };
  ranlib = function(l) { }
  
-@@ -107,31 +106,18 @@
+@@ -107,31 +101,16 @@
  search_includes = function(ism2) {
  	return $array(
  		"/usr/include",
 -		if( ism2 ) "/usr/local/apache2/include" else "/usr/local/apache/include",
- 		if( ism2 ) "/usr/include/apache2" else "/usr/apache/include",
+-		if( ism2 ) "/usr/include/apache2" else "/usr/apache/include",
 -		if( ism2 ) "/opt/local/apache2/include" else "/opt/local/include/apache",
- 		if( ism2 ) "" else "/usr/include/apache-1.3",
+-		if( ism2 ) "" else "/usr/include/apache-1.3",
 -		"/usr/local/include/mysql",
++		"/usr/include/apache2",
  		"/usr/include/mysql",
 -		"/usr/local/include",
  		"/usr/include/apr-1",
-+		"/usr/include/apr-1.0",
- 		"/usr/include/apr-0",
+-		"/usr/include/apr-0",
 -		"/usr/local/include/apr-1",
 -		"/usr/local/include/apr-0",
 -		"/opt/local/include",
 -		"/opt/local/include/apr-1",
 -		"/opt/local/include/apr-0",
 -		"/opt/local/include/mysql",
++		"/usr/include/apr-1.0",
  	);
  }
  
@@ -63,3 +76,15 @@ diff -urNad neko-1.5.3~/src/tools/install.neko neko-1.5.3/src/tools/install.neko
  );
  
  exec = function(cmd) {
+@@ -334,9 +313,10 @@
+ 	if( l == "include" || l == "std" || l == "CVS" || ftype(l) != "dir" )
+ 		$goto(next);
+ 	chdir(l);
+-	compile_lib(l);
+ 	if( l == "mod_neko" )
+ 		compile_lib("mod_neko2");
++	else
++		compile_lib(l);
+ 	chdir("..");
+ next:
+ 	libs = libs[1];

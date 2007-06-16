@@ -13,7 +13,7 @@ case "$1" in
         if [ -x $DISABLE ]; then
             $DISABLE neko || true
         fi
-        ## Deregister with Apache 1.3.
+        ## Deregister with (obsolete) Apache 1.3.
         if [ -x $MODCONF ]; then
             for flavour in apache apache-perl apache-ssl; do
                 if [ -f /etc/$flavour/modules.conf ]; then

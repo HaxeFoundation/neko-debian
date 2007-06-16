@@ -1,0 +1,23 @@
+#!/bin/sh
+
+set -e
+
+ENABLE2=/usr/sbin/a2enmod
+
+case "$1" in
+    configure)
+        ## Register with Apache 2.2, if present.
+        if [ -x $ENABLE2 ]; then
+            ## Enable neko module.
+            $ENABLE2 neko
+        fi
+        ;;
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+    *)
+        echo "postinst called with unknown argument \`$1'" >&2
+esac
+
+#DEBHELPER#
+
+exit 0

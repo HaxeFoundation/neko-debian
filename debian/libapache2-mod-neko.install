@@ -1,0 +1,2 @@
+debian/neko.conf etc/apache2/mods-available
+debian/neko.load etc/apache2/mods-available

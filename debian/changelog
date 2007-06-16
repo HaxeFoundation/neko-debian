@@ -1,3 +1,17 @@
+neko (1.5.3-6) unstable; urgency=low
+
+  * Drop support for obsolete Apache 1.
+    (Closes: #429139)
+  * Provide Apache 2 module as seperate package.
+
+ -- Jens Peter Secher <jps@debian.org>  Sat, 16 Jun 2007 20:25:06 +0200
+
+neko (1.5.3-5bpo1) stable; urgency=low
+
+  * Backport to etch (no change).
+
+ -- Jens Peter Secher <jps@debian.org>  Sun, 27 May 2007 10:57:37 +0200
+
 neko (1.5.3-5) unstable; urgency=low
 
   * Compile with -DEAPI.
