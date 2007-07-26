@@ -1,3 +1,12 @@
+neko (1.6.0-1) unstable; urgency=low
+
+  * New upstream release, which obsoletes 75-kfreebsd-defines.dpatch and
+    incorporates 50-embed-endianess.dpatch .
+  * New build-depends libgtk2.0-dev.
+  * Update man pages.
+
+ -- Jens Peter Secher <jps@debian.org>  Thu, 26 Jul 2007 23:39:47 +0200
+
 neko (1.5.3-6) unstable; urgency=low
 
   * Drop support for obsolete Apache 1.

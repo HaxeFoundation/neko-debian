@@ -59,11 +59,10 @@ _context *neko_vm_context = NULL;
 static val_type t_null = VAL_NULL;
 static val_type t_true = VAL_BOOL;
 static val_type t_false = VAL_BOOL;
-static val_type t_array = VAL_ARRAY;
 EXTERN value val_null = (value)&t_null;
 EXTERN value val_true = (value)&t_true;
 EXTERN value val_false = (value)&t_false;
-static value empty_array = (value)&t_array;
+static varray empty_array = { VAL_ARRAY, NULL };
 static vstring empty_string = { VAL_STRING, 0 };
 static kind_list **kind_names = NULL;
 field id_compare;
@@ -118,6 +117,7 @@ EXTERN void neko_gc_stats( int *heap, int *free ) {
 }
 
 typedef struct {
+	thread_main_func init;
 	thread_main_func main;
 	void *param;
 #	ifdef NEKO_WINDOWS
@@ -130,9 +130,7 @@ typedef struct {
 #ifdef NEKO_WINDOWS
 static DWORD WINAPI ThreadMain( void *_p ) {
 	tparams p = *(tparams*)_p;
-	// this will create the thread message queue
-	PeekMessage(NULL,NULL,0,0,0);
-	// now we can give back control to the main thread
+	p.init(p.param);
 	ReleaseSemaphore(p.lock,1,NULL);
 	return p.main(p.param);
 }
@@ -140,6 +138,7 @@ static DWORD WINAPI ThreadMain( void *_p ) {
 static void *ThreadMain( void *_p ) {
 	tparams *lp = (tparams*)_p;
 	tparams p = *lp;
+	p.init(p.param);
 	// we have the 'param' value on this thread C stack
 	// so it's safe to give back control to main thread
 	pthread_mutex_unlock(&lp->lock);
@@ -147,8 +146,9 @@ static void *ThreadMain( void *_p ) {
 }
 #endif
 
-EXTERN int neko_thread_create( thread_main_func main, void *param, void *handle ) {
+EXTERN int neko_thread_create( thread_main_func init, thread_main_func main, void *param, void *handle ) {
 	tparams p;
+	p.init = init;
 	p.main = main;
 	p.param = param;
 #	ifdef NEKO_WINDOWS
@@ -217,7 +217,7 @@ EXTERN value alloc_float( tfloat f ) {
 EXTERN value alloc_array( unsigned int n ) {
 	value v;
 	if( n == 0 )
-		return empty_array;
+		return (value)&empty_array;
 	if( n > max_array_size )
 		failure("max_array_size reached");
 	v = (value)GC_MALLOC(sizeof(varray)+(n - 1)*sizeof(value));
@@ -246,7 +246,7 @@ EXTERN value alloc_function( void *c_prim, unsigned int nargs, const char *name 
 	return (value)v;
 }
 
-value alloc_module_function( void *m, int_val pos, int nargs ) {
+value neko_alloc_module_function( void *m, int_val pos, int nargs ) {
 	vfunction *v;
 	if( nargs < 0 && nargs != VAR_ARGS )
 		failure("alloc_module_function");
@@ -309,7 +309,7 @@ static value apply5( value p1, value p2, value p3, value p4, value p5 ) {
 	return val_callN(a[-1],a,n);
 }
 
-value alloc_apply( int nargs, value env ) {
+value neko_alloc_apply( int nargs, value env ) {
 	vfunction *v = (vfunction*)GC_MALLOC(sizeof(vfunction));
 	v->t = VAL_PRIMITIVE;
 	switch( nargs ) {
@@ -382,6 +382,7 @@ extern void neko_free_jit();
 #define INIT_ID(x)	id_##x = val_id("__" #x)
 
 EXTERN void neko_global_init( void *s ) {
+	empty_array.ptr = val_null;
 	neko_gc_init(s);
 	neko_vm_context = context_new();
 	neko_fields_lock = context_lock_new();
@@ -432,22 +433,20 @@ EXTERN void neko_set_stack_base( void *s ) {
 	neko_gc_set_stack_base(s);
 }
 
-EXTERN void kind_export( vkind k, const char *name ) {
-	kind_list *l = (kind_list*)alloc(sizeof(kind_list));
-	l->k = k;
+EXTERN void kind_share( vkind *k, const char *name ) {
+	kind_list *l = *kind_names;
+	while( l != NULL ) {
+		if( strcmp(l->name,name) == 0 ) {
+			*k = l->k;
+			return;
+		}
+		l = l->next;
+	}
+	l = (kind_list*)alloc(sizeof(kind_list));
+	l->k = *k;
 	l->name = name;
 	l->next = *kind_names;
 	*kind_names = l;
-}
-
-EXTERN vkind kind_import( const char *name ) {
-	kind_list *l = *kind_names;
-	while( l != NULL ) {
-		if( strcmp(l->name,name) == 0 )
-			return l->k;
-		l = l->next;
-	}
-	return NULL;
 }
 
 #endif

@@ -5,9 +5,9 @@
 ## DP: Use -rpath to force search in /usr/lib/neko.
 
 @DPATCH@
-diff -urNad neko-1.5.3~/src/tools/install.neko neko-1.5.3/src/tools/install.neko
---- neko-1.5.3~/src/tools/install.neko	2007-06-16 20:58:05.000000000 +0200
-+++ neko-1.5.3/src/tools/install.neko	2007-06-16 21:01:05.000000000 +0200
+diff -urNad neko-1.6.0~/src/tools/install.neko neko-1.6.0/src/tools/install.neko
+--- neko-1.6.0~/src/tools/install.neko	2007-07-26 23:06:18.000000000 +0200
++++ neko-1.6.0/src/tools/install.neko	2007-07-26 23:13:14.000000000 +0200
 @@ -39,11 +39,6 @@
  // LIBS DATAS
  
@@ -20,7 +20,7 @@ diff -urNad neko-1.5.3~/src/tools/install.neko neko-1.5.3/src/tools/install.neko
  	mod_neko2 => {
  		src => $array("mod_neko","cgi"),
  		inc => $array("httpd.h","apr.h"),
-@@ -53,7 +48,6 @@
+@@ -54,7 +49,6 @@
  		src => $array("mysql"),
  		inc => "mysql.h",
  		incname => "MySQL 4.+"
@@ -28,7 +28,7 @@ diff -urNad neko-1.5.3~/src/tools/install.neko neko-1.5.3/src/tools/install.neko
  		lparams => "-lz"
  	},
  	regexp => {
-@@ -78,11 +72,11 @@
+@@ -86,11 +80,11 @@
  
  // PLATFORM
  
@@ -40,9 +40,9 @@ diff -urNad neko-1.5.3~/src/tools/install.neko neko-1.5.3/src/tools/install.neko
 -linkoptions = switch system { "Mac" => "-bundle -undefined dynamic_lookup -L../../bin -lneko" default => "-shared -L../../bin -lneko" };
 +linkoptions = switch system { "Mac" => "-bundle -undefined dynamic_lookup -L../../bin -lneko" default => "-shared -L../../bin -lneko -Wl,-rpath -Wl,/usr/lib/neko" };
  nekovm = switch system { "Windows" => "..\\bin\\neko" default => "../bin/neko" };
- ranlib = function(l) { }
  
-@@ -107,31 +101,16 @@
+ if( osx_universal ) {
+@@ -113,36 +107,17 @@
  search_includes = function(ism2) {
  	return $array(
  		"/usr/include",
@@ -51,18 +51,23 @@ diff -urNad neko-1.5.3~/src/tools/install.neko neko-1.5.3/src/tools/install.neko
 -		if( ism2 ) "/opt/local/apache2/include" else "/opt/local/include/apache",
 -		if( ism2 ) "" else "/usr/include/apache-1.3",
 -		"/usr/local/include/mysql",
-+		"/usr/include/apache2",
++ 		"/usr/include/apache2",
  		"/usr/include/mysql",
 -		"/usr/local/include",
  		"/usr/include/apr-1",
+-		"/usr/include/apr-1.0",
 -		"/usr/include/apr-0",
++ 		"/usr/include/apr-1.0",
+ 		"/usr/include/gtk-2.0",
 -		"/usr/local/include/apr-1",
+-		"/usr/local/include/apr-1.0",
 -		"/usr/local/include/apr-0",
 -		"/opt/local/include",
 -		"/opt/local/include/apr-1",
+-		"/opt/local/include/apr-1.0",
 -		"/opt/local/include/apr-0",
 -		"/opt/local/include/mysql",
-+		"/usr/include/apr-1.0",
+-		"/Developer/Headers/FlatCarbon",
  	);
  }
  
@@ -76,7 +81,7 @@ diff -urNad neko-1.5.3~/src/tools/install.neko neko-1.5.3/src/tools/install.neko
  );
  
  exec = function(cmd) {
-@@ -334,9 +313,10 @@
+@@ -344,9 +319,10 @@
  	if( l == "include" || l == "std" || l == "CVS" || ftype(l) != "dir" )
  		$goto(next);
  	chdir(l);

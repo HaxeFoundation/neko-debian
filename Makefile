@@ -1,6 +1,6 @@
 ## CONFIG
 
-INSTALL_PREFIX = /usr
+INSTALL_PREFIX = /usr/local
 
 CFLAGS = -Wall -O3 -fPIC -fomit-frame-pointer -I vm -DCOMPACT_TABLE
 EXTFLAGS = -pthread
@@ -10,7 +10,6 @@ LIBNEKO_LIBS = -ldl -lgc -lm
 NEKOVM_FLAGS = -Lbin -lneko
 STD_NDLL_FLAGS = ${NEKOVM_FLAGS}
 INSTALL_FLAGS =
-RANLIB =
 
 NEKO_EXEC = LD_LIBRARY_PATH=../bin:${LD_LIBRARY_PATH} NEKOPATH=../boot:../bin ../bin/neko
 
@@ -42,11 +41,16 @@ CFLAGS = -g -Wall -O3 -momit-leaf-frame-pointer -I vm -I /usr/local/include -DCO
 EXTFLAGS =
 MAKESO = $(CC) -O -shared
 LIBNEKO_NAME = neko.dll
-LIBNEKO_LIBS = -Lbin -lgc 
+LIBNEKO_LIBS = -Lbin -lgc
 STD_NDLL_FLAGS = ${NEKOVM_FLAGS} -lws2_32
 endif
 
 ### OSX SPECIFIC
+
+ifeq (${UNIVERSAL},1)
+MACOSX=1
+OSX_UNIVERSAL=1
+endif
 
 ifeq (${MACOSX}, 1)
 export MACOSX_DEPLOYMENT_TARGET=10.3
@@ -66,11 +70,10 @@ CFLAGS += -arch ppc -arch i386 -L/usr/local/lib
 UNIV = libs/include/osx_universal
 #linking to shared lib (.a) explicitly:
 LIBNEKO_DEPS = ${UNIV}/libgc.a  -lSystemStubs
-LIBNEKO_LIBS = ${LIBNEKO_DEPS} -dynamiclib -single_module ${LIBNEKO_INSTALL} ${CFLAGS} 
+LIBNEKO_LIBS = ${LIBNEKO_DEPS} -dynamiclib -single_module ${LIBNEKO_INSTALL} ${CFLAGS}
 NEKOVM_FLAGS = -L${PWD}/bin -lneko
 STD_NDLL_FLAGS = -bundle ${NEKOVM_FLAGS} ${CFLAGS}
 INSTALL_FLAGS = -osx-universal
-RANLIB = ranlib libs/include/osx_universal/libgc.a
 
 endif
 
@@ -79,10 +82,13 @@ endif
 ### MAKE
 
 VM_OBJECTS = vm/main.o
-STD_OBJECTS = libs/std/buffer.o libs/std/date.o libs/std/file.o libs/std/init.o libs/std/int32.o libs/std/math.o libs/std/string.o libs/std/random.o libs/std/serialize.o libs/std/socket.o libs/std/sys.o libs/std/xml.o libs/std/module.o libs/std/md5.o libs/std/utf8.o libs/std/memory.o libs/std/misc.o libs/std/thread.o
+STD_OBJECTS = libs/std/buffer.o libs/std/date.o libs/std/file.o libs/std/init.o libs/std/int32.o libs/std/math.o libs/std/string.o libs/std/random.o libs/std/serialize.o libs/std/socket.o libs/std/sys.o libs/std/xml.o libs/std/module.o libs/std/md5.o libs/std/utf8.o libs/std/memory.o libs/std/misc.o libs/std/thread.o libs/std/process.o
 LIBNEKO_OBJECTS = vm/alloc.o vm/builtins.o vm/callback.o vm/context.o vm/interp.o vm/load.o vm/objtable.o vm/others.o vm/hash.o vm/module.o vm/jit_x86.o
 
 all: createbin libneko neko std compiler libs
+
+universal:
+	make MACOSX=1 OSX_UNIVERSAL=1
 
 createbin:
 	-mkdir bin 2>/dev/null
@@ -111,7 +117,6 @@ compiler:
 	(cd src; ${NEKO_EXEC} nekoc -link ../boot/nekoml.n nekoml/Main)
 
 bin/${LIBNEKO_NAME}: ${LIBNEKO_OBJECTS}
-	${RANLIB}
 	${MAKESO} ${EXTFLAGS} -o $@ ${LIBNEKO_OBJECTS} ${LIBNEKO_LIBS}
 
 bin/neko: $(VM_OBJECTS)
@@ -123,16 +128,18 @@ bin/std.ndll: ${STD_OBJECTS}
 
 clean:
 	rm -rf bin/${LIBNEKO_NAME} ${LIBNEKO_OBJECTS} ${VM_OBJECTS}
-	rm -rf bin/neko bin/nekoc bin/nekoml bin/nekotools 
+	rm -rf bin/neko bin/nekoc bin/nekoml bin/nekotools
 	rm -rf bin/std bin/*.ndll bin/*.n libs/*/*.o
 	rm -rf src/*.n src/neko/*.n src/nekoml/*.n src/tools/*.n
 	rm -rf bin/mtypes bin/tools
 
-install:	
+install:
 	cp bin/${LIBNEKO_NAME} ${INSTALL_PREFIX}/lib
-	cp bin/neko bin/nekoc bin/nekotools ${INSTALL_PREFIX)/bin
-	mkdir ${INSTALL_PREFIX}/lib/neko
+	cp bin/neko bin/nekoc bin/nekotools ${INSTALL_PREFIX}/bin
+	-mkdir ${INSTALL_PREFIX}/lib/neko
 	cp bin/*.ndll ${INSTALL_PREFIX}/lib/neko
+	-mkdir ${INSTALL_PREFIX}/include
+	cp vm/neko*.h ${INSTALL_PREFIX}/include
 
 uninstall:
 	rm -rf ${INSTALL_PREFIX}/lib/${LIBNEKO_NAME}

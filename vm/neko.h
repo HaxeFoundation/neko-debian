@@ -30,12 +30,16 @@
 #	define NEKO_LINUX
 #endif
 
+#if defined(__FreeBSD_kernel__)
+#	define NEKO_GNUKBSD
+#endif
+
 #if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
 #	define NEKO_BSD
 #endif
 
 // COMPILER/PROCESSOR FLAGS
-#if defined(__GNUC__) 
+#if defined(__GNUC__)
 #	define NEKO_GCC
 #endif
 
@@ -59,12 +63,16 @@
 #	define NEKO_64BITS
 #endif
 
+#if defined(NEKO_LINUX) || defined(NEKO_MAC) || defined(NEKO_BSD) || defined(NEKO_GNUKBSD)
+#	define NEKO_POSIX
+#endif
+
 #include <stddef.h>
 #ifndef NEKO_VCC
 #	include <stdint.h>
 #endif
 
-#define NEKO_VERSION	153
+#define NEKO_VERSION	160
 
 typedef intptr_t int_val;
 
@@ -253,12 +261,13 @@ typedef struct {
 #endif
 
 #ifdef HEADER_IMPORTS
-#	define DECLARE_PRIM(func,nargs) C_FUNCTION_BEGIN IMPORT void *func##__##nargs(); C_FUNCTION_END
-#	define DECLARE_KIND(name) C_FUNCTION_BEGIN IMPORT extern vkind name; C_FUNCTION_END
+#	define H_EXTERN IMPORT
 #else
-#	define DECLARE_PRIM(func,nargs) C_FUNCTION_BEGIN EXPORT void *func##__##nargs(); C_FUNCTION_END
-#	define DECLARE_KIND(name) C_FUNCTION_BEGIN EXPORT extern vkind name; C_FUNCTION_END
+#	define H_EXTERN EXPORT
 #endif
+
+#define DECLARE_PRIM(func,nargs) C_FUNCTION_BEGIN H_EXTERN void *func##__##nargs(); C_FUNCTION_END
+#define DECLARE_KIND(name) C_FUNCTION_BEGIN H_EXTERN extern vkind name; C_FUNCTION_END
 
 #define alloc_float			neko_alloc_float
 #define alloc_string		neko_alloc_string
@@ -273,9 +282,11 @@ typedef struct {
 #define val_call0			neko_val_call0
 #define val_call1			neko_val_call1
 #define val_call2			neko_val_call2
+#define val_call3			neko_val_call3
 #define val_callN			neko_val_callN
 #define val_ocall0			neko_val_ocall0
 #define val_ocall1			neko_val_ocall1
+#define val_ocall2			neko_val_ocall2
 #define val_ocallN			neko_val_ocallN
 #define val_callEx			neko_val_callEx
 #define	alloc_root			neko_alloc_root
@@ -287,6 +298,7 @@ typedef struct {
 #define alloc_buffer		neko_alloc_buffer
 #define buffer_append		neko_buffer_append
 #define buffer_append_sub	neko_buffer_append_sub
+#define buffer_append_char	neko_buffer_append_char
 #define buffer_to_string	neko_buffer_to_string
 #define val_buffer			neko_val_buffer
 #define val_compare			neko_val_compare
@@ -299,8 +311,7 @@ typedef struct {
 #define val_hash			neko_val_hash
 #define k_int32				neko_k_int32
 #define k_hash				neko_k_hash
-#define kind_import			neko_kind_import
-#define kind_export			neko_kind_export
+#define kind_share			neko_kind_share
 
 C_FUNCTION_BEGIN
 
@@ -359,8 +370,7 @@ C_FUNCTION_BEGIN
 	EXTERN void val_rethrow( value v );
 	EXTERN int val_hash( value v );
 
-	EXTERN void kind_export( vkind k, const char *name );
-	EXTERN vkind kind_import( const char *name );
+	EXTERN void kind_share( vkind *k, const char *name );	
 	EXTERN void _neko_failure( value msg, const char *file, int line );
 
 C_FUNCTION_END

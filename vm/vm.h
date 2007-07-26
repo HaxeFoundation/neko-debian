@@ -20,10 +20,17 @@
 #include "neko_vm.h"
 #include "context.h"
 
-#define INIT_STACK_SIZE (1 << 7)
+#define INIT_STACK_SIZE (1 << 8)
 #define MAX_STACK_SIZE	(1 << 18)
+#define MAX_STACK_PER_FUNCTION	128
 #define PROF_SIZE		(1 << 20)
 #define CALL_MAX_ARGS	5
+
+typedef struct _custom_list {
+	vkind tag;
+	void *custom;
+	struct _custom_list *next;
+} custom_list;
 
 struct _neko_vm {
 	int_val *sp;
@@ -35,12 +42,12 @@ struct _neko_vm {
 	int_val trap;
 	void *jit_val;
 	jmp_buf start;
-	int ncalls;
+	void *c_stack_max;
 	int run_jit;
 	value exc_stack;
 	neko_printer print;
 	void *print_param;
-	void *custom;
+	custom_list *clist;
 	value resolver;
 	char tmp[100];
 };
@@ -50,7 +57,7 @@ extern _context *neko_vm_context;
 
 #define NEKO_VM()	((neko_vm*)context_get(neko_vm_context))
 
-extern value alloc_apply( int nargs, value env );
+extern value neko_alloc_apply( int nargs, value env );
 extern value neko_interp( neko_vm *vm, void *m, int_val acc, int_val *pc );
 
 #endif
