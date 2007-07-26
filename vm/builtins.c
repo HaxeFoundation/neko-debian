@@ -525,7 +525,7 @@ static value builtin_apply( value *args, int nargs ) {
 		val_array_ptr(env)[i+1] = args[i];
 	while( i++ < fargs )
 		val_array_ptr(env)[i] = val_null;
-	return alloc_apply(fargs-nargs,env);
+	return neko_alloc_apply(fargs-nargs,env);
 }
 
 static value varargs_callback( value *args, int nargs ) {
@@ -667,7 +667,7 @@ static value builtin_int( value f ) {
 static value builtin_float( value f ) {
 	if( val_is_string(f) )
 		return alloc_float( atof(val_string(f)) );
-	if( val_is_float(f) )
+	if( val_is_number(f) )
 		return alloc_float( val_number(f) );
 	return val_null;
 }

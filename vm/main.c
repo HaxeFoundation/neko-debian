@@ -27,7 +27,7 @@
 #	include <sys/param.h>
 #	include <mach-o/dyld.h>
 #endif
-#ifdef NEKO_LINUX
+#ifdef NEKO_POSIX
 #	include <signal.h>
 #endif
 
@@ -57,8 +57,12 @@ static char *executable_path() {
 #else
 	static char path[200];
 	int length = readlink("/proc/self/exe", path, sizeof(path));
-	if( length < 0 || length >= 200 )
-		return getenv("_");
+	if( length < 0 || length >= 200 ) {
+		char *p = getenv("   "); // for upx
+		if( p == NULL )
+			p = getenv("_");
+		return p;
+	}
 	path[length] = '\0';
 	return path;
 #endif
@@ -66,7 +70,7 @@ static char *executable_path() {
 
 int neko_has_embedded_module() {
 	char *exe = executable_path();
-	char id[4];
+	unsigned char id[8];
 	int pos;
 	if( exe == NULL )
 		return 0;
@@ -74,14 +78,12 @@ int neko_has_embedded_module() {
 	if( self == NULL )
 		return 0;
 	fseek(self,-8,SEEK_END);
-	fread(id,1,4,self);
+	fread(id,1,8,self);
 	if( id[0] != 'N' || id[1] != 'E' || id[2] != 'K' || id[3] != 'O' ) {
 		fclose(self);
 		return 0;
 	}
-	fread(&pos,1,4,self);
-	if( neko_is_big_endian() )
-		pos = (pos >> 24) | ((pos >> 8) & 0xFF00) | ((pos << 8) & 0xFF0000) | (pos << 24);
+	pos = id[4] | id[5] << 8 | id[6] << 16 | id[7] << 24;
 	fseek(self,pos,SEEK_SET);
 	return 1;
 }
@@ -179,7 +181,7 @@ static int execute_file( neko_vm *vm, char *file, value mload ) {
 #	define _CrtSetDbgFlag(x)
 #endif
 
-#ifdef NEKO_LINUX
+#ifdef NEKO_POSIX
 static void handle_signal( int signal ) {
 	val_throw(alloc_string("Segmentation fault"));
 }
@@ -193,7 +195,7 @@ int main( int argc, char *argv[] ) {
 	neko_global_init(&vm);
 	vm = neko_vm_alloc(NULL);
 	neko_vm_select(vm);
-#	ifdef NEKO_LINUX
+#	ifdef NEKO_POSIX
 	struct sigaction act;
 	act.sa_sigaction = NULL;
 	act.sa_handler = handle_signal;

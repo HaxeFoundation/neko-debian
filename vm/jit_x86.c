@@ -16,14 +16,12 @@
 /* ************************************************************************ */
 #include "vm.h"
 #include "neko_mod.h"
-#define PARAMETER_TABLE
-#include "opcodes.h"
 #include "objtable.h"
 #include <string.h>
 #include <math.h>
 #include <stdio.h>
 
-#ifdef NEKO_LINUX
+#ifdef NEKO_POSIX
 #	include <sys/types.h>
 #	include <sys/mman.h>
 #	define USE_MMAP
@@ -49,13 +47,16 @@
 
 #ifdef JIT_ENABLE
 
+#define PARAMETER_TABLE
+#include "opcodes.h"
+
 extern field id_add, id_radd, id_sub, id_rsub, id_mult, id_rmult, id_div, id_rdiv, id_mod, id_rmod;
 extern field id_get, id_set;
 
 extern int neko_stack_expand( int_val *sp, int_val *csp, neko_vm *vm );
-extern value append_int( neko_vm *vm, value str, int x, bool way );
-extern value append_strings( value s1, value s2 );
-extern value alloc_module_function( void *m, int_val pos, int nargs );
+extern value neko_append_int( neko_vm *vm, value str, int x, bool way );
+extern value neko_append_strings( value s1, value s2 );
+extern value neko_alloc_module_function( void *m, int_val pos, int nargs );
 extern void neko_process_trap( neko_vm *vm );
 extern void neko_setup_trap( neko_vm *vm );
 extern value NEKO_TYPEOF[];
@@ -511,8 +512,7 @@ enum IOperation {
 
 typedef struct {
 	char *boot;
-	char *stack_expand_0;
-	char *stack_expand_4;
+	char *stack_expand;
 	char *runtime_error;
 	char *call_normal_jit[NARGS];
 	char *call_this_jit[NARGS];
@@ -613,12 +613,7 @@ static void jit_finalize_context( jit_ctx *ctx ) {
 
 static void jit_push_infos( jit_ctx *ctx, enum PushInfosMode callb ) {
 	INIT_BUFFER;
-	int *jend;
 	stack_push(CSP,4);
-	XCmp_rr(SP,CSP);
-	XJump(JGt,jend);
-	label(code->stack_expand_4);
-	PATCH_JUMP(jend);
 	if( callb == CALLBACK ) {
 		XMov_pc(CSP,FIELD(-3),CONST(callback_return));
 		get_var_p(CSP,FIELD(-2),VEnv);
@@ -712,26 +707,31 @@ static void jit_trap( jit_ctx *ctx, int n ) {
 	END_BUFFER;
 }
 
-static void jit_stack_expand( jit_ctx *ctx, int n ) {
+static void jit_stack_expand( jit_ctx *ctx, int _ ) {
+	int *jresize, *jdone;
+	int max = MAX_STACK_PER_FUNCTION;
 	INIT_BUFFER;
-	int *jok;
-	stack_pop(CSP,n);
-	stack_pad(0);
+	stack_push(CSP,max);
+	XCmp_rr(SP,CSP);
+	XJump(JLt,jresize);
+	stack_pop(CSP,max);
+	XRet();
+	PATCH_JUMP(jresize);
+	stack_pop(CSP,max);
 	XPush_r(ACC);
 	XPush_r(VM);
 	XPush_r(CSP);
 	XPush_r(SP);
 	XCall_m(neko_stack_expand);
 	XCmp_rb(ACC,0);
-	XJump(JNeq,jok);
+	XJump(JNeq,jdone);
 	stack_pad(-1);
 	XPush_c(CONST(strings[0])); // Stack overflow
 	XCall_m(val_throw);
-	PATCH_JUMP(jok);
+	PATCH_JUMP(jdone);
 	XMov_rp(ACC,Esp,FIELD(3));
 	end_call();
-	stack_pop_pad(4,0);
-	stack_push(CSP,n);
+	stack_pop(Esp,4);
 	XRet();
 	END_BUFFER;
 }
@@ -1352,7 +1352,7 @@ static void jit_add( jit_ctx *ctx, int _ ) {
 	XPush_r(VM);
 	// call append_int
 	PATCH_JUMP(jappint1);
-	XCall_m(append_int);
+	XCall_m(neko_append_int);
 	stack_pop_pad(4,3);
 	END();
 
@@ -1365,7 +1365,7 @@ static void jit_add( jit_ctx *ctx, int _ ) {
 	stack_pad(1);
 	XPush_r(ACC);
 	XPush_r(TMP);
-	XCall_m(append_strings);
+	XCall_m(neko_append_strings);
 	stack_pop_pad(2,1);
 	END();
 
@@ -1452,8 +1452,8 @@ static void jit_add( jit_ctx *ctx, int _ ) {
 static void jit_array_access( jit_ctx *ctx, int n ) {
 	INIT_BUFFER;
 	int *jerr1, *jerr2;
-	char *jend1, *jend2, *jend3;
-	int *jnot_array, *jbounds;
+	char *jend1, *jend2 = NULL, *jend3;
+	int *jnot_array, *jbounds = NULL;
 
 	is_int(ACC,true,jerr1);
 	XMov_rp(TMP,ACC,0);
@@ -1462,15 +1462,19 @@ static void jit_array_access( jit_ctx *ctx, int n ) {
 	XCmp_rb(TMP2,VAL_ARRAY);
 
 	XJump(JNeq,jnot_array);
-	XShr_rc(TMP,3);
-	XCmp_rc(TMP,n);
-	XJump(JLte,jbounds);
+	if( n > 0 ) {
+		XShr_rc(TMP,3);
+		XCmp_rc(TMP,n);
+		XJump(JLte,jbounds);
+	}
 	XMov_rp(ACC,ACC,FIELD(n + 1));
 	XJump_near(jend1);
 
-	PATCH_JUMP(jbounds);
-	XMov_rc(ACC,CONST(val_null));
-	XJump_near(jend2);
+	if( n > 0 ) {
+		PATCH_JUMP(jbounds);
+		XMov_rc(ACC,CONST(val_null));
+		XJump_near(jend2);
+	}
 
 	PATCH_JUMP(jnot_array);
 	XCmp_rb(TMP2,VAL_OBJECT);
@@ -1556,7 +1560,7 @@ static void jit_make_env( jit_ctx *ctx, int esize ) {
 
 	// call alloc_module_function
 	XMov_pr(Esp,FIELD(3),ACC); // save acc
-	XCall_m(alloc_module_function);
+	XCall_m(neko_alloc_module_function);
 	XMov_rp(TMP,Esp,FIELD(3)); // restore acc
 	XMov_rp(TMP2,Esp,FIELD(4)); // restore type
 	stack_pop_pad(5,2);
@@ -1940,16 +1944,10 @@ static void jit_opcode( jit_ctx *ctx, enum OPCODE op, int p ) {
 		PATCH_JUMP(jend3);
 		break;
 		}
-	case Push: {
-		int *jend;
+	case Push:
 		stack_push(SP,1);
-		XCmp_rr(SP,CSP);
-		XJump(JGt,jend);
-		label(code->stack_expand_0);
-		PATCH_JUMP(jend);
 		XMov_pr(SP,FIELD(0),ACC);
 		break;
-		}
 	case Pop:
 		if( p > 10 ) {
 			pop_loop(p);
@@ -2276,7 +2274,7 @@ static void jit_opcode( jit_ctx *ctx, enum OPCODE op, int p ) {
 
 		// call alloc_apply
 		PATCH_JUMP(jdone);
-		XCall_m(alloc_apply);
+		XCall_m(neko_alloc_apply);
 		stack_pop(Esp,2);
 		XJump_near(jend);
 
@@ -2480,7 +2478,7 @@ static void jit_opcode( jit_ctx *ctx, enum OPCODE op, int p ) {
 #	define MAX_OP_SIZE		1000
 #	define MAX_BUF_SIZE		1000
 #else
-#	define MAX_OP_SIZE		291 // Apply(4)
+#	define MAX_OP_SIZE		298 // Apply(4) + label(stack_expand)
 #	define MAX_BUF_SIZE		500
 #endif
 
@@ -2537,8 +2535,7 @@ void neko_init_jit() {
 	code = (jit_code*)alloc_root(sizeof(jit_code) / sizeof(char*));
 	FILL_BUFFER(jit_boot,NULL,boot);
 	FILL_BUFFER(jit_trap,0,handle_trap);
-	FILL_BUFFER(jit_stack_expand,0,stack_expand_0);
-	FILL_BUFFER(jit_stack_expand,4,stack_expand_4);
+	FILL_BUFFER(jit_stack_expand,0,stack_expand);
 	FILL_BUFFER(jit_runtime_error,0,runtime_error);
 	FILL_BUFFER(jit_invalid_access,0,invalid_access);
 	for(i=0;i<OP_LAST;i++) {
@@ -2586,8 +2583,21 @@ int neko_can_jit() {
 	return 1;
 }
 
+static unsigned int next_function( neko_module *m, unsigned int k, int_val *faddr ) {
+	while( k < m->nglobals && !val_is_function(m->globals[k]) )
+		k++;
+	if( k == m->nglobals ) {
+		*faddr = -1;
+		return 0;
+	}
+	*faddr = (int_val*)((vfunction*)m->globals[k])->addr - m->code;
+	return k;
+}
+
 void neko_module_jit( neko_module *m ) {
 	unsigned int i = 0;
+	int_val faddr;
+	unsigned int fcursor = next_function(m,0,&faddr);
 	jit_ctx *ctx = jit_init_context(NULL,0);
 	ctx->pos = (int*)tmp_alloc(sizeof(int)*(m->codesize + 1));
 	ctx->module = m;
@@ -2608,6 +2618,14 @@ void neko_module_jit( neko_module *m ) {
 			ctx->baseptr = buf2;
 			ctx->buf.p = buf2 + curpos;
 			ctx->size = nsize;
+		}
+
+		// begin of function : check stack overflow
+		if( faddr == i ) {
+			INIT_BUFFER;
+			label(code->stack_expand);
+			END_BUFFER;
+			fcursor = next_function(m,fcursor+1,&faddr);
 		}
 
 		// --------- debug ---------

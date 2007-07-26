@@ -2,8 +2,8 @@
 <VisualStudioProject
 	ProjectType="Visual C++"
 	Version="7.10"
-	Name="std"
-	ProjectGUID="{32AA6F03-939E-469B-8E85-A0CCE55464AD}"
+	Name="ui"
+	ProjectGUID="{9A36DC8A-8070-4F5D-A401-6889DD652288}"
 	Keyword="Win32Proj">
 	<Platforms>
 		<Platform
@@ -19,11 +19,11 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="../../vm;../include"
-				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;_USRDLL;STD_EXPORTS"
+				AdditionalIncludeDirectories="../../vm"
+				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;_USRDLL;UI_EXPORTS"
 				MinimalRebuild="TRUE"
 				BasicRuntimeChecks="3"
-				RuntimeLibrary="3"
+				RuntimeLibrary="1"
 				UsePrecompiledHeader="0"
 				WarningLevel="3"
 				Detect64BitPortabilityProblems="TRUE"
@@ -32,13 +32,13 @@
 				Name="VCCustomBuildTool"/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="../../bin/neko.lib ws2_32.lib"
-				OutputFile="../../bin/std.ndll"
+				AdditionalDependencies="../../bin/neko.lib ../std/Debug/std.lib"
+				OutputFile="../../bin/ui.ndll"
 				LinkIncremental="2"
 				GenerateDebugInformation="TRUE"
-				ProgramDatabaseFile="$(OutDir)/std.pdb"
+				ProgramDatabaseFile="$(OutDir)/ui.pdb"
 				SubSystem="2"
-				ImportLibrary="$(OutDir)/std.lib"
+				ImportLibrary="$(OutDir)/ui.lib"
 				TargetMachine="1"/>
 			<Tool
 				Name="VCMIDLTool"/>
@@ -69,8 +69,8 @@
 			CharacterSet="2">
 			<Tool
 				Name="VCCLCompilerTool"
-				AdditionalIncludeDirectories="../../vm;../include"
-				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;_USRDLL;STD_EXPORTS"
+				AdditionalIncludeDirectories="../../vm"
+				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;_USRDLL;UI_EXPORTS"
 				RuntimeLibrary="2"
 				BufferSecurityCheck="FALSE"
 				UsePrecompiledHeader="0"
@@ -81,15 +81,16 @@
 				Name="VCCustomBuildTool"/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="../../bin/neko.lib ws2_32.lib msvcrt60.lib"
-				OutputFile="../../bin/std.ndll"
+				AdditionalDependencies="msvcrt60.lib ../../bin/neko.lib ../std/Release/std.lib"
+				OutputFile="../../bin/ui.ndll"
 				LinkIncremental="1"
+				IgnoreAllDefaultLibraries="FALSE"
 				IgnoreDefaultLibraryNames="MSVCRT"
 				GenerateDebugInformation="TRUE"
 				SubSystem="2"
 				OptimizeReferences="2"
 				EnableCOMDATFolding="2"
-				ImportLibrary="$(OutDir)/std.lib"
+				ImportLibrary="$(OutDir)/ui.lib"
 				TargetMachine="1"/>
 			<Tool
 				Name="VCMIDLTool"/>
@@ -114,64 +115,13 @@
 		</Configuration>
 	</Configurations>
 	<References>
+		<ProjectReference
+			ReferencedProjectIdentifier="{32AA6F03-939E-469B-8E85-A0CCE55464AD}"
+			Name="std"/>
 	</References>
 	<Files>
 		<File
-			RelativePath=".\buffer.c">
-		</File>
-		<File
-			RelativePath=".\date.c">
-		</File>
-		<File
-			RelativePath=".\file.c">
-		</File>
-		<File
-			RelativePath=".\init.c">
-		</File>
-		<File
-			RelativePath=".\int32.c">
-		</File>
-		<File
-			RelativePath=".\math.c">
-		</File>
-		<File
-			RelativePath=".\md5.c">
-		</File>
-		<File
-			RelativePath=".\memory.c">
-		</File>
-		<File
-			RelativePath=".\misc.c">
-		</File>
-		<File
-			RelativePath=".\module.c">
-		</File>
-		<File
-			RelativePath=".\process.c">
-		</File>
-		<File
-			RelativePath=".\random.c">
-		</File>
-		<File
-			RelativePath=".\serialize.c">
-		</File>
-		<File
-			RelativePath=".\socket.c">
-		</File>
-		<File
-			RelativePath=".\string.c">
-		</File>
-		<File
-			RelativePath=".\sys.c">
-		</File>
-		<File
-			RelativePath=".\thread.c">
-		</File>
-		<File
-			RelativePath=".\utf8.c">
-		</File>
-		<File
-			RelativePath=".\xml.c">
+			RelativePath=".\ui.c">
 		</File>
 	</Files>
 	<Globals>

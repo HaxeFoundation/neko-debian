@@ -23,6 +23,10 @@
 #include "neko_mod.h"
 #include "objtable.h"
 
+#ifndef NEKO_WINDOWS
+#	include <sys/resource.h>
+#endif
+
 #if defined(NEKO_GCC) && defined(NEKO_X86)
 #	define ACC_BACKUP	int_val __acc = acc;
 #	define ACC_RESTORE	acc = __acc;
@@ -57,7 +61,7 @@
 
 extern field id_add, id_radd, id_sub, id_rsub, id_mult, id_rmult, id_div, id_rdiv, id_mod, id_rmod;
 extern field id_get, id_set;
-extern value alloc_module_function( void *m, int_val pos, int nargs );
+extern value neko_alloc_module_function( void *m, int_val pos, int nargs );
 extern char *jit_boot_seq;
 extern char *jit_handle_trap;
 typedef void (*jit_handle)( neko_vm * );
@@ -89,13 +93,27 @@ static void default_printer( const char *s, int len, void *out ) {
 
 EXTERN neko_vm *neko_vm_alloc( void *custom ) {
 	neko_vm *vm = (neko_vm*)alloc(sizeof(neko_vm));
+#	ifdef NEKO_WINDOWS
+	int stack_size = 0x100000; // 1MB default
+#	else
+	struct rlimit st;
+	int stack_size;
+	if( getrlimit(RLIMIT_STACK,&st) != 0 || st.rlim_cur == RLIM_INFINITY )
+		stack_size = 8192 << 10;
+	else
+		stack_size = st.rlim_cur;
+#	endif
 	vm->spmin = (int_val*)alloc(INIT_STACK_SIZE*sizeof(int_val));
 	vm->print = default_printer;
 	vm->print_param = stdout;
-	vm->custom = custom;
+	vm->clist = NULL;
+	// the maximum stack position for a C call is estimated
+	//  - stack grows bottom
+	//  - neko_vm_alloc should be near the beginning of the stack
+	//  - we keep 64KB for the C call work space and error margin
+	vm->c_stack_max = (void*)(((int_val)&vm) - (stack_size - 0x10000));
 	vm->exc_stack = alloc_array(0);
 	vm->spmax = vm->spmin + INIT_STACK_SIZE;
-	vm->ncalls = 0;
 	vm->sp = vm->spmax;
 	vm->csp = vm->spmin - 1;
 	vm->vthis = val_null;
@@ -107,7 +125,7 @@ EXTERN neko_vm *neko_vm_alloc( void *custom ) {
 }
 
 EXTERN int neko_vm_jit( neko_vm *vm, int enable_jit ) {
-	if( enable_jit ) 
+	if( enable_jit )
 		vm->run_jit = neko_can_jit();
 	else
 		vm->run_jit = 0;
@@ -122,8 +140,38 @@ EXTERN neko_vm *neko_vm_current() {
 	return (neko_vm*)context_get(neko_vm_context);
 }
 
-EXTERN void *neko_vm_custom( neko_vm *vm ) {
-	return vm->custom;
+EXTERN void *neko_vm_custom( neko_vm *vm, vkind k ) {
+	custom_list *c = vm->clist;
+	while( c != NULL ) {
+		if( c->tag == k )
+			return c->custom;
+		c = c->next;
+	}
+	return NULL;
+}
+
+EXTERN void neko_vm_set_custom( neko_vm *vm, vkind k, void *v ) {
+	custom_list *c = vm->clist, *prev = NULL;
+	while( c != NULL ) {
+		if( c->tag == k ) {
+			if( v ) {
+				c->custom = v;
+				return;
+			}
+			if( prev == NULL )
+				vm->clist = c->next;
+			else
+				prev->next = c->next;
+			return;
+		}
+		prev = c;
+		c = c->next;
+	}
+	c = (custom_list*)alloc(sizeof(custom_list));
+	c->tag = k;
+	c->custom = v;
+	c->next = vm->clist;
+	vm->clist = c;	
 }
 
 typedef struct {
@@ -336,16 +384,20 @@ static int_val jit_run( neko_vm *vm, vfunction *acc ) {
 #define MULT(x,y) ((x) * (y))
 #define DIV(x,y) ((x) / (y))
 
-#define ObjectOp(obj,param,id) { \
+#define ObjectOpGen(obj,param,id,err) { \
 		value _o = (value)obj; \
 		value _arg = (value)param; \
 		value _f = val_field(_o,id); \
-		if( _f == val_null ) \
-			RuntimeError("Unsupported operation",false); \
-		BeginCall(); \
-		acc = (int_val)val_callEx(_o,_f,&_arg,1,NULL); \
-		EndCall(); \
+		if( _f == val_null ) { \
+			err; \
+		} else { \
+			BeginCall(); \
+			acc = (int_val)val_callEx(_o,_f,&_arg,1,NULL); \
+			EndCall(); \
+		} \
 	}
+
+#define ObjectOp(obj,param,id) ObjectOpGen(obj,param,id,RuntimeError("Unsupported operation",false))
 
 #define NumberOp(op,fop,id_op,id_rop) \
 		if( (acc & 1) && (*sp & 1) ) \
@@ -367,17 +419,20 @@ static int_val jit_run( neko_vm *vm, vfunction *acc ) {
 		} else if( val_tag(acc) == VAL_FLOAT && val_tag(*sp) == VAL_FLOAT ) \
 			acc = (int_val)alloc_float(fop(val_float(*sp),val_float(acc))); \
 		else if( val_tag(*sp) == VAL_OBJECT ) \
-			ObjectOp(*sp,acc,id_op) \
-		else if( val_tag(acc) == VAL_OBJECT ) \
-			ObjectOp(acc,*sp,id_rop) \
-		else \
-			RuntimeError(#op,false); \
+			ObjectOpGen(*sp,acc,id_op,goto id_op##_next) \
+		else { \
+			id_op##_next: \
+			if( val_tag(acc) == VAL_OBJECT ) \
+				ObjectOp(acc,*sp,id_rop) \
+			else \
+				RuntimeError(#op,false); \
+		} \
 		*sp++ = ERASE; \
 		Next;
 
 extern int neko_stack_expand( int_val *sp, int_val *csp, neko_vm *vm );
-extern value append_int( neko_vm *vm, value str, int x, bool way );
-extern value append_strings( value s1, value s2 );
+extern value neko_append_int( neko_vm *vm, value str, int x, bool way );
+extern value neko_append_strings( value s1, value s2 );
 
 #define STACK_EXPAND { \
 		ACC_BACKUP; \
@@ -503,12 +558,13 @@ static int_val interp_loop( neko_vm *VM_ARG, neko_module *m, int_val _acc, int_v
 	Instr(AccField)
 		if( val_is_object(acc) ) {
 			value *f;
-			value old = (value)acc;
+			value old = (value)acc, tacc = (value)acc;
 			do {
 				f = otable_find(((vobject*)acc)->table,(field)*pc);
 				if( f )
 					break;
-				acc = (int_val)((vobject*)acc)->proto;
+				acc = (int_val)((vobject*)tacc)->proto;
+				tacc = (value)acc;
 			} while( acc );
 			if( f )
 				acc = (int_val)*f;
@@ -665,7 +721,7 @@ static int_val interp_loop( neko_vm *VM_ARG, neko_module *m, int_val _acc, int_v
 					val_array_ptr(env)[i--] = (value)*sp;
 					*sp++ = ERASE;
 				}
-				acc = (int_val)alloc_apply((int)(fargs - *pc++),env);
+				acc = (int_val)neko_alloc_apply((int)(fargs - *pc++),env);
 			}
 		}
 		Next;
@@ -754,7 +810,7 @@ static int_val interp_loop( neko_vm *VM_ARG, neko_module *m, int_val _acc, int_v
 			}
 			if( val_is_int(acc) || val_tag(acc) != VAL_FUNCTION )
 				RuntimeError("Invalid environment",false);
-			acc = (int_val)alloc_module_function(((vfunction*)acc)->module,(int_val)((vfunction*)acc)->addr,((vfunction*)acc)->nargs);
+			acc = (int_val)neko_alloc_module_function(((vfunction*)acc)->module,(int_val)((vfunction*)acc)->addr,((vfunction*)acc)->nargs);
 			((vfunction*)acc)->env = (value)tmp;
 		}
 		Next;
@@ -792,7 +848,7 @@ static int_val interp_loop( neko_vm *VM_ARG, neko_module *m, int_val _acc, int_v
 			if( val_tag(*sp) == VAL_FLOAT )
 				acc = (int_val)alloc_float(val_float(*sp) + val_int(acc));
 			else if( (val_tag(*sp)&7) == VAL_STRING  )
-				acc = (int_val)append_int(vm,(value)*sp,val_int(acc),true);
+				acc = (int_val)neko_append_int(vm,(value)*sp,val_int(acc),true);
 			else if( val_tag(*sp) == VAL_OBJECT )
 				ObjectOp(*sp,acc,id_add)
 			else
@@ -801,7 +857,7 @@ static int_val interp_loop( neko_vm *VM_ARG, neko_module *m, int_val _acc, int_v
 			if( val_tag(acc) == VAL_FLOAT )
 				acc = (int_val)alloc_float(val_int(*sp) + val_float(acc));
 			else if( (val_tag(acc)&7) == VAL_STRING )
-				acc = (int_val)append_int(vm,(value)acc,val_int(*sp),false);
+				acc = (int_val)neko_append_int(vm,(value)acc,val_int(*sp),false);
 			else if( val_tag(acc) == VAL_OBJECT )
 				ObjectOp(acc,*sp,id_radd)
 			else
@@ -809,22 +865,28 @@ static int_val interp_loop( neko_vm *VM_ARG, neko_module *m, int_val _acc, int_v
 		} else if( val_tag(acc) == VAL_FLOAT && val_tag(*sp) == VAL_FLOAT )
 			acc = (int_val)alloc_float(val_float(*sp) + val_float(acc));
 		else if( (val_tag(acc)&7) == VAL_STRING && (val_tag(*sp)&7) == VAL_STRING )
-			acc = (int_val)append_strings((value)*sp,(value)acc);
+			acc = (int_val)neko_append_strings((value)*sp,(value)acc);
 		else if( val_tag(*sp) == VAL_OBJECT )
-			ObjectOp(*sp,acc,id_add)
-		else if( val_tag(acc) == VAL_OBJECT )
-			ObjectOp(acc,*sp,id_radd)
-		else if( (val_tag(acc)&7) == VAL_STRING || (val_tag(*sp)&7) == VAL_STRING ) {
-			ACC_BACKUP
-			buffer b = alloc_buffer(NULL);
-			BeginCall();
-			val_buffer(b,(value)*sp);
-			ACC_RESTORE;
-			val_buffer(b,(value)acc);
-			EndCall();
-			acc = (int_val)buffer_to_string(b);
-		} else
-			RuntimeError("+",false);
+			ObjectOpGen(*sp,acc,id_add,goto add_2)
+		else {
+			add_2:
+			if( val_tag(acc) == VAL_OBJECT )
+				ObjectOpGen(acc,*sp,id_radd,goto add_3)
+			else {
+				add_3:
+				if( (val_tag(acc)&7) == VAL_STRING || (val_tag(*sp)&7) == VAL_STRING ) {
+					ACC_BACKUP
+					buffer b = alloc_buffer(NULL);
+					BeginCall();
+					val_buffer(b,(value)*sp);
+					ACC_RESTORE;
+					val_buffer(b,(value)acc);
+					EndCall();
+					acc = (int_val)buffer_to_string(b);
+				} else
+					RuntimeError("+",false);
+			}
+		}
 		*sp++ = ERASE;
 		Next;
 	Instr(Sub)
@@ -835,11 +897,14 @@ static int_val interp_loop( neko_vm *VM_ARG, neko_module *m, int_val _acc, int_v
 		if( val_is_number(acc) && val_is_number(*sp) )
 			acc = (int_val)alloc_float( ((tfloat)val_number(*sp)) / val_number(acc) );
 		else if( val_is_object(*sp) )
-			ObjectOp(*sp,acc,id_div)
-		else if( val_is_object(acc) )
-			ObjectOp(acc,*sp,id_rdiv)
-		else
-			RuntimeError("/",false);
+			ObjectOpGen(*sp,acc,id_div,goto div_next)
+		else {
+			div_next:
+			if( val_is_object(acc) )
+				ObjectOp(acc,*sp,id_rdiv)
+			else
+				RuntimeError("/",false);
+		}
 		*sp++ = ERASE;
 		Next;
 	Instr(Mod)
@@ -925,12 +990,10 @@ end:
 value neko_interp( neko_vm *vm, void *_m, int_val acc, int_val *pc ) {
 	int_val *sp, *csp, *trap;
 	int_val init_sp = vm->spmax - vm->sp;
-	int old_ncalls = vm->ncalls;
 	neko_module *m = (neko_module*)_m;
 	jmp_buf old;
 	memcpy(&old,&vm->start,sizeof(jmp_buf));
 	if( setjmp(vm->start) ) {
-		vm->ncalls = old_ncalls;
 		acc = (int_val)vm->vthis;
 
 		// if uncaught or outside init stack, reraise
@@ -968,8 +1031,8 @@ value neko_interp( neko_vm *vm, void *_m, int_val acc, int_val *pc ) {
 			*vm->sp++ = ERASE;
 
 		// jit return ?
-		if( val_is_kind(m,neko_kind_module) ) {			
-			m = (neko_module*)val_data(m);			
+		if( val_is_kind(m,neko_kind_module) ) {
+			m = (neko_module*)val_data(m);
 			pc = (int_val*)((((int_val)pc)>>1) + (int_val)m->jit);
 			acc = ((jit_prim)jit_boot_seq)(vm,pc,(value)acc,m);
 			return (value)acc;

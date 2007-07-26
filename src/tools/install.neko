@@ -47,7 +47,8 @@ libs = {
 	mod_neko2 => {
 		src => $array("mod_neko","cgi"),
 		inc => $array("httpd.h","apr.h"),
-		incname => "Apache 2.2.x"
+		incname => "Apache 2.2.x",
+		cflags => "-D_LARGEFILE64_SOURCE",
 	},
 	mysql => {
 		src => $array("mysql"),
@@ -74,6 +75,13 @@ libs = {
 		incname => "Sqlite 3",
 		lparams => "-lsqlite3",
 	},
+	ui => {
+		src => $array("ui"),
+		inc => switch system { "Mac" => "Carbon.h" default => "gtk/gtk.h" },
+		incname => switch system { "Mac" => "Carbon" default => "GTK+2.0" },
+		cflags => switch system { "Mac" => "" default => "`pkg-config --cflags gtk+-2.0`" },
+		lparams => switch system { "Mac" => "-framework Carbon" default => "`pkg-config --libs gtk+-2.0` -lgthread-2.0" },
+	}
 }
 
 // PLATFORM
@@ -84,7 +92,6 @@ if( cc == null ) cc = "gcc";
 linkcmd = switch system { "BSD" => "ld" default => cc };
 linkoptions = switch system { "Mac" => "-bundle -undefined dynamic_lookup -L../../bin -lneko" default => "-shared -L../../bin -lneko" };
 nekovm = switch system { "Windows" => "..\\bin\\neko" default => "../bin/neko" };
-ranlib = function(l) { }
 
 if( osx_universal ) {
 	cflags += " -arch ppc -arch i386";
@@ -95,7 +102,6 @@ if( osx_universal ) {
 	libs.zlib.lib = "osx_universal/libz.a";
 	libs.mysql.lparams = null;
 	libs.mysql.lib = "osx_universal/libmysqlclient.a";
-	ranlib = function(l) { exec("ranlib "+l); }
 }
 
 // COMMANDS
@@ -115,13 +121,18 @@ search_includes = function(ism2) {
 		"/usr/include/mysql",
 		"/usr/local/include",
 		"/usr/include/apr-1",
+		"/usr/include/apr-1.0",
 		"/usr/include/apr-0",
+		"/usr/include/gtk-2.0",
 		"/usr/local/include/apr-1",
+		"/usr/local/include/apr-1.0",
 		"/usr/local/include/apr-0",
 		"/opt/local/include",
 		"/opt/local/include/apr-1",
+		"/opt/local/include/apr-1.0",
 		"/opt/local/include/apr-0",
 		"/opt/local/include/mysql",
+		"/Developer/Headers/FlatCarbon",
 	);
 }
 
@@ -228,8 +239,8 @@ copy = function(file,path) {
 	};
 }
 
-compile = function(file,incl) {
-	exec(cc+" "+cflags+" -c "+make("-I",includes)+make("-I",incl)+file+".c");
+compile = function(file,eflags,incl) {
+	exec(cc+" "+cflags+" "+eflags+" -c "+make("-I",includes)+make("-I",incl)+file+".c");
 }
 
 nekoboot = function(file) {
@@ -291,11 +302,10 @@ compile_lib = function(lib) {
 				return;
 		}
 		linklib = dir + "/" + linklib;
-		ranlib(linklib);
 	}
 	var i = 0;
 	while( i < $asize(data.src) ) {
-		compile(data.src[i],dirs);
+		compile(data.src[i],if( data.cflags != null ) data.cflags else "", dirs);
 		i = i + 1;
 	}
 	link(data.src,lib,if( data.lparams != null ) { data.lparams+" " } else ""," "+linklib);
