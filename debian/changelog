@@ -1,3 +1,10 @@
+neko (1.6.0-2) unstable; urgency=low
+
+  * Support non-stripped builds (DEB_BUILD_OPTIONS=nostrip).
+    (Closes: #437609)
+
+ -- Jens Peter Secher <jps@debian.org>  Sat, 18 Aug 2007 22:34:21 +0200
+
 neko (1.6.0-1) unstable; urgency=low
 
   * New upstream release, which obsoletes 75-kfreebsd-defines.dpatch and

@@ -8,6 +8,11 @@ ifeq (,$(findstring noopt,$(DEB_BUILD_OPTIONS)))
 else
 	cflags += -O0
 endif
+ifeq (,$(findstring nostrip,$(DEB_BUILD_OPTIONS)))
+	stripcmd = strip
+else
+	stripcmd = touch
+endif
 
 # Use dpatch
 include /usr/share/dpatch/dpatch.make
@@ -15,7 +20,7 @@ include /usr/share/dpatch/dpatch.make
 build: patch-stamp build-stamp
 build-stamp: 
 	dh_testdir
-	make CFLAGS="$(cflags)"
+	make CFLAGS="$(cflags)" STRIP=$(stripcmd)
 	touch $@
 
 binary-indep: build-stamp
