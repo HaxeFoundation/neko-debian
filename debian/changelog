@@ -1,3 +1,15 @@
+neko (1.6.0-3) unstable; urgency=low
+
+  * Fixed missing reference to shared mysqlclient library.
+
+ -- Jens Peter Secher <jps@debian.org>  Tue, 13 Nov 2007 00:42:42 +0100
+
+neko (1.6.0-2~bpo40+1) etch-backports; urgency=low
+
+  * Backport to Etch (no change).
+
+ -- Jens Peter Secher <jps@debian.org>  Sat, 08 Sep 2007 14:16:50 +0200
+
 neko (1.6.0-2) unstable; urgency=low
 
   * Support non-stripped builds (DEB_BUILD_OPTIONS=nostrip).
@@ -24,7 +36,7 @@ neko (1.5.3-6) unstable; urgency=low
 
 neko (1.5.3-5bpo1) stable; urgency=low
 
-  * Backport to etch (no change).
+  * Backport to Etch (no change).
 
  -- Jens Peter Secher <jps@debian.org>  Sun, 27 May 2007 10:57:37 +0200
 
