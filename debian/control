@@ -3,8 +3,9 @@ Section: interpreters
 Priority: optional
 Maintainer: Jens Peter Secher <jps@debian.org>
 Standards-Version: 3.7.2
-Build-Depends: debhelper (>= 4), dpatch, pkg-config, libgc-dev, apache2-dev, libmysqlclient15-dev, libsqlite3-dev, libpcre3-dev, libapr1-dev, libgtk2.0-dev
+Build-Depends: debhelper (>= 5), dpatch, pkg-config, libgc-dev, apache2-dev, libmysqlclient15-dev, libsqlite3-dev, libpcre3-dev, libapr1-dev, libgtk2.0-dev
 Build-Conflicts: neko
+Homepage: http://nekovm.org
 
 Package: neko
 Architecture: any
@@ -23,18 +24,17 @@ Description: High-level dynamically typed programming language
  can be easily embedded into other applications, and libraries are
  directly accessible using the C foreign function interface.
  .
- Neko was written by Nicolas Cannasse and more information can be
- found at http://nekovm.org
+ Neko was written by Nicolas Cannasse.
 
 Package: libapache2-mod-neko
+Section: web
 Architecture: all
 Depends: neko (>= ${source:Version}), apache2-mpm-prefork
-Description: High-level dynamically typed programming language
+Description: Apache module for running server-side neko programs
  Neko has been designed to provide a common runtime for several
  different languages, including JavaScript and haXe.
  .
  This package includes a module for Apache 2 so that you can
  dynamically generate server-side web pages from Apache.
  .
- Neko was written by Nicolas Cannasse and more information can be
- found at http://nekovm.org
+ Neko was written by Nicolas Cannasse.

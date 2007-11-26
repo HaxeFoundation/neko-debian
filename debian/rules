@@ -23,6 +23,9 @@ build-stamp:
 	make CFLAGS="$(cflags)" STRIP=$(stripcmd)
 	touch $@
 
+debian := $(CURDIR)/debian
+overrides := usr/share/lintian/overrides
+
 binary-indep: build-stamp
 	dh_testdir
 	dh_testroot
@@ -39,19 +42,21 @@ binary-indep: build-stamp
 binary-arch: build-stamp
 	dh_testdir
 	dh_testroot
-	dh_install -pneko
-	mkdir -p $(CURDIR)/debian/neko/usr/share/lintian/overrides
-	cp $(CURDIR)/debian/neko.lintian-overrides $(CURDIR)/debian/neko/usr/share/lintian/overrides/neko
-	dh_installdocs -pneko
-	dh_installchangelogs -pneko CHANGES
+	dh_install -a
+	mkdir -p $(debian)/neko/$(overrides)
+	cp $(debian)/neko.lintian-overrides $(debian)/neko/$(overrides)/neko
+	dh_installdocs -a
+	dh_installchangelogs -a CHANGES
 	dh_installman -pneko debian/neko.1 debian/nekoc.1 debian/nekotools.1
-	dh_compress -pneko
-	dh_fixperms -pneko
-	dh_installdeb -pneko
-	dh_shlibdeps -pneko
-	dh_gencontrol -pneko
-	dh_md5sums -pneko
-	dh_builddeb -pneko
+	dh_compress -a
+	dh_fixperms -a
+	dh_installdeb -a
+	dh_makeshlibs -a -V 'neko (>= 1.6.0-4)'
+	dh_shlibdeps -a -L neko -l debian/neko/usr/lib/neko
+	find $(debian)/neko -name '*.ndll' -exec chmod -x '{}' ';'
+	dh_gencontrol -a
+	dh_md5sums -a
+	dh_builddeb -a
 
 binary: binary-indep binary-arch
 

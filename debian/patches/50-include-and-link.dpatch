@@ -6,8 +6,8 @@
 
 @DPATCH@
 diff -urNad neko-1.6.0~/src/tools/install.neko neko-1.6.0/src/tools/install.neko
---- neko-1.6.0~/src/tools/install.neko	2007-10-14 14:36:06.000000000 +0200
-+++ neko-1.6.0/src/tools/install.neko	2007-11-13 00:41:12.000000000 +0100
+--- neko-1.6.0~/src/tools/install.neko	2007-11-27 19:47:07.000000000 +0100
++++ neko-1.6.0/src/tools/install.neko	2007-11-27 19:49:02.000000000 +0100
 @@ -39,11 +39,6 @@
  // LIBS DATAS
  
@@ -26,11 +26,18 @@ diff -urNad neko-1.6.0~/src/tools/install.neko neko-1.6.0/src/tools/install.neko
  		incname => "MySQL 4.+"
 -		lib => "libmysqlclient.a",
 -		lparams => "-lz"
-+		lparams => "-lmysqlclient -lz",
++		lparams => "-lmysqlclient",
  	},
  	regexp => {
  		src => $array("regexp"),
-@@ -86,11 +80,11 @@
+@@ -80,17 +74,17 @@
+ 		inc => switch system { "Mac" => "Carbon.h" default => "gtk/gtk.h" },
+ 		incname => switch system { "Mac" => "Carbon" default => "GTK+2.0" },
+ 		cflags => switch system { "Mac" => "" default => "`pkg-config --cflags gtk+-2.0`" },
+-		lparams => switch system { "Mac" => "-framework Carbon" default => "`pkg-config --libs gtk+-2.0` -lgthread-2.0" },
++		lparams => switch system { "Mac" => "-framework Carbon" default => "-lgthread-2.0" },
+ 	}
+ }
  
  // PLATFORM
  
