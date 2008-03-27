@@ -1,4 +1,4 @@
-bin/*.so usr/lib/neko
+bin/*.so* usr/lib/neko
 bin/*.ndll usr/lib/neko
 bin/*.n usr/lib/neko
 bin/neko usr/bin

@@ -1,3 +1,3 @@
-25-strip-and-rpath
+25-soname-rpath-strip
 50-include-and-link
 

@@ -217,7 +217,7 @@ EXTERN value alloc_float( tfloat f ) {
 EXTERN value alloc_array( unsigned int n ) {
 	value v;
 	if( n == 0 )
-		return (value)&empty_array;
+		return (value)(void*)&empty_array;
 	if( n > max_array_size )
 		failure("max_array_size reached");
 	v = (value)GC_MALLOC(sizeof(varray)+(n - 1)*sizeof(value));
@@ -382,6 +382,9 @@ extern void neko_free_jit();
 #define INIT_ID(x)	id_##x = val_id("__" #x)
 
 EXTERN void neko_global_init( void *s ) {
+#	ifdef NEKO_DIRECT_THREADED
+	op_last = neko_get_ttable()[Last];
+#	endif
 	empty_array.ptr = val_null;
 	neko_gc_init(s);
 	neko_vm_context = context_new();

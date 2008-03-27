@@ -141,6 +141,35 @@ static value builtin_ablit( value dst, value dp, value src, value sp, value l ) 
 	return val_true;
 }
 
+/**
+	$aconcat : array array -> array
+	<doc>
+	Build a single array from several ones.
+	</doc>
+**/
+static value builtin_aconcat( value arrs ) {
+	int tot = 0;
+	int len;
+	int i;
+	value all;
+	val_check(arrs,array);
+	len = val_array_size(arrs);
+	for(i=0;i<len;i++) {
+		value a = val_array_ptr(arrs)[i];
+		val_check(a,array);
+		tot += val_array_size(a);
+	}
+	all = alloc_array(tot);
+	tot = 0;
+	for(i=0;i<len;i++) {
+		value a = val_array_ptr(arrs)[i];
+		int j, max = val_array_size(a);
+		for(j=0;j<max;j++)
+			val_array_ptr(all)[tot++] = val_array_ptr(a)[j];
+	}
+	return all;
+}
+
 /**	<doc><h2>String Builtins</h2></doc> **/
 
 /**
@@ -635,7 +664,16 @@ static value builtin_isinfinite( value f ) {
 	<doc>Convert the value to the corresponding integer or return [null]</doc>
 **/
 static value builtin_int( value f ) {
-	if( val_is_string(f) ) {
+	switch( val_type(f) ) {
+	case VAL_FLOAT:
+#ifdef	NEKO_WINDOWS
+		return alloc_int((int)val_float(f));
+#else
+		// in case of overflow, the result is unspecified by ISO
+		// so we have to make a module 2^32 before casting to int
+		return alloc_int((unsigned int)fmod(val_float(f),4294967296.0));
+#endif
+	case VAL_STRING: {
 		char *c = val_string(f);
 		if( val_strlen(f) >= 2 && c[0] == '0' && c[1] == 'x' ) {
 			int h = 0;
@@ -654,9 +692,10 @@ static value builtin_int( value f ) {
 			return alloc_int(h);
 		}
 		return alloc_int( atoi(val_string(f)) );
+		}
+	case VAL_INT:
+		return f;
 	}
-	if( val_is_number(f) )
-		return alloc_int( (int)val_number(f) );
 	return val_null;
 }
 
@@ -1146,6 +1185,7 @@ void neko_init_builtins() {
 	BUILTIN(asize,1);
 	BUILTIN(asub,3);
 	BUILTIN(ablit,5);
+	BUILTIN(aconcat,1);
 
 	BUILTIN(smake,1);
 	BUILTIN(ssize,1);

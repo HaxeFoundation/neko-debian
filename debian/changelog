@@ -1,3 +1,51 @@
+neko (1.7.0-1) unstable; urgency=low
+
+  * New upstream release.
+
+ -- Jens Peter Secher <jps@debian.org>  Thu, 27 Mar 2008 20:53:37 +0100
+
+neko (1.6.0-4~bpo40+2) etch-backports; urgency=low
+
+  * Pass version extracted by dpkg-parsechangelog to dh_makeshlibs instead
+    of error prone hard-coding.
+
+ -- Jens Peter Secher <jps@debian.org>  Tue, 27 Nov 2007 21:09:43 +0100
+
+neko (1.6.0-4~bpo40+1) etch-backports; urgency=low
+
+  * Without the Homepage field.
+
+ -- Jens Peter Secher <jps@debian.org>  Tue, 27 Nov 2007 21:09:43 +0100
+
+neko (1.6.0-4) unstable; urgency=low
+
+  * Give libneko a proper SONAME to avoid breakage by new dpkg-shlibdeps.
+  * Avoid a lot of unnecessary shared library dependencies.
+  * Place the apache module in section web.
+  * Use the Homepage field in the control file.
+  * Bump debhelper to version 5.
+
+ -- Jens Peter Secher <jps@debian.org>  Mon, 26 Nov 2007 19:03:00 +0100
+
+neko (1.6.0-3) unstable; urgency=low
+
+  * Fixed missing reference to shared mysqlclient library.
+
+ -- Jens Peter Secher <jps@debian.org>  Tue, 13 Nov 2007 00:42:42 +0100
+
+neko (1.6.0-2~bpo40+1) etch-backports; urgency=low
+
+  * Backport to Etch (no change).
+
+ -- Jens Peter Secher <jps@debian.org>  Sat, 08 Sep 2007 14:16:50 +0200
+
+neko (1.6.0-2) unstable; urgency=low
+
+  * Support non-stripped builds (DEB_BUILD_OPTIONS=nostrip).
+    (Closes: #437609)
+
+ -- Jens Peter Secher <jps@debian.org>  Sat, 18 Aug 2007 22:34:21 +0200
+
 neko (1.6.0-1) unstable; urgency=low
 
   * New upstream release, which obsoletes 75-kfreebsd-defines.dpatch and
@@ -17,7 +65,7 @@ neko (1.5.3-6) unstable; urgency=low
 
 neko (1.5.3-5bpo1) stable; urgency=low
 
-  * Backport to etch (no change).
+  * Backport to Etch (no change).
 
  -- Jens Peter Secher <jps@debian.org>  Sun, 27 May 2007 10:57:37 +0200
 
