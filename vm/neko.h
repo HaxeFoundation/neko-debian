@@ -67,12 +67,17 @@
 #	define NEKO_POSIX
 #endif
 
+#if defined(NEKO_GCC)
+#	define NEKO_THREADED
+#	define NEKO_DIRECT_THREADED
+#endif
+
 #include <stddef.h>
 #ifndef NEKO_VCC
 #	include <stdint.h>
 #endif
 
-#define NEKO_VERSION	160
+#define NEKO_VERSION	170
 
 typedef intptr_t int_val;
 
@@ -198,7 +203,7 @@ typedef struct {
 #undef EXTERN
 #undef EXPORT
 #undef IMPORT
-#ifdef NEKO_VCC
+#if defined(NEKO_VCC) || defined(NEKO_MINGW)
 #	define INLINE __inline
 #	define EXPORT __declspec( dllexport )
 #	define IMPORT __declspec( dllimport )
@@ -250,8 +255,8 @@ typedef struct {
 #endif
 
 #define VAR_ARGS (-1)
-#define DEFINE_PRIM_MULT(func) C_FUNCTION_BEGIN EXPORT void *func##__MULT() { return &func; } C_FUNCTION_END
-#define DEFINE_PRIM(func,nargs) C_FUNCTION_BEGIN EXPORT void *func##__##nargs() { return &func; } C_FUNCTION_END
+#define DEFINE_PRIM_MULT(func) C_FUNCTION_BEGIN EXPORT void *func##__MULT() { return (void*)(&func); } C_FUNCTION_END
+#define DEFINE_PRIM(func,nargs) C_FUNCTION_BEGIN EXPORT void *func##__##nargs() { return (void*)(&func); } C_FUNCTION_END
 #define DEFINE_KIND(name) int_val __kind_##name = 0; vkind name = (vkind)&__kind_##name;
 
 #ifdef NEKO_INSTALLER
@@ -370,7 +375,7 @@ C_FUNCTION_BEGIN
 	EXTERN void val_rethrow( value v );
 	EXTERN int val_hash( value v );
 
-	EXTERN void kind_share( vkind *k, const char *name );	
+	EXTERN void kind_share( vkind *k, const char *name );
 	EXTERN void _neko_failure( value msg, const char *file, int line );
 
 C_FUNCTION_END

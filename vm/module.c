@@ -216,15 +216,37 @@ static int neko_check_stack( neko_module *m, unsigned char *tmp, unsigned int i,
 	return 1;
 }
 
-static value read_debug_infos( reader r, readp p, char *tmp ) {
+static void append_array( value *arr, int pos, value v ) {
+	int len = val_array_size(*arr);
+	if( pos >= len ) {
+		value a2 = alloc_array((len * 3) / 2);
+		memcpy(val_array_ptr(a2),val_array_ptr(*arr),len * sizeof(value));
+		*arr = a2;
+	}
+	val_array_ptr(*arr)[pos] = v;
+}
+
+#define SETBIT(b) { \
+	if( (i & 31) == 0 ) { \
+		bits++; \
+		bits->base = pos_index; \
+		bits->bits = 0; \
+	} else \
+		bits->bits |= b << (31 - (i & 31)); \
+	i++; \
+}
+
+static void *read_debug_infos( reader r, readp p, char *tmp, neko_module *m  ) {
 	unsigned int i;
-	int curpos = 0;
+	int curline = 0;
 	value curfile;
 	unsigned int npos;
 	unsigned int nfiles;
 	unsigned char c,c2;
 	value files;
-	value pos, pp;
+	value positions, pp;
+	neko_debug *bits;
+	int pos_index = -1;
 	int lot_of_files = 0;
 	READ(&c,1);
 	if( c >= 0x80 ) {
@@ -242,8 +264,13 @@ static value read_debug_infos( reader r, readp p, char *tmp ) {
 		val_array_ptr(files)[i] = alloc_string(tmp);
 	}
 	READ_LONG(npos);
+	if( npos != m->codesize )
+		ERROR();
 	curfile = val_array_ptr(files)[0];
-	pos = alloc_array(npos);
+	positions = alloc_array(2 + (npos / 20));
+	bits = (neko_debug *)alloc_private(sizeof(neko_debug) * ((npos + 31) >> 5));
+	m->dbgidxs = bits;
+	bits--;
 	i = 0;
 	pp = NULL;
 	while( i < npos ) {
@@ -267,44 +294,53 @@ static value read_debug_infos( reader r, readp p, char *tmp ) {
 			if( pp == NULL ) {
 				pp = alloc_array(2);
 				val_array_ptr(pp)[0] = curfile;
-				val_array_ptr(pp)[1] = alloc_int(curpos);
-			}
-			while( count > 0 ) {
-				val_array_ptr(pos)[i] = pp;
+				val_array_ptr(pp)[1] = alloc_int(curline);
+				append_array(&positions,++pos_index,pp);
+				SETBIT(1);
 				count--;
-				i++;
 			}
-			curpos += delta;
-			if( delta != 0 ) pp = NULL;
+			while( count-- )
+				SETBIT(0);
+			if( delta ) {
+				curline += delta;
+				pp = NULL;
+			}
 		} else if( c & 4 ) {
-			curpos += c >> 3;
+			curline += c >> 3;
 			pp = alloc_array(2);
 			val_array_ptr(pp)[0] = curfile;
-			val_array_ptr(pp)[1] = alloc_int(curpos);
-			val_array_ptr(pos)[i++] = pp;
+			val_array_ptr(pp)[1] = alloc_int(curline);
+			append_array(&positions,++pos_index,pp);
+			SETBIT(1);
 		} else {
 			unsigned char b2;
 			unsigned char b3;
 			READ(&b2,1);
 			READ(&b3,1);
-			curpos = (c >> 3) | (b2 << 5) | (b3 << 13);
+			curline = (c >> 3) | (b2 << 5) | (b3 << 13);
 			pp = alloc_array(2);
 			val_array_ptr(pp)[0] = curfile;
-			val_array_ptr(pp)[1] = alloc_int(curpos);
-			val_array_ptr(pos)[i++] = pp;
+			val_array_ptr(pp)[1] = alloc_int(curline);
+			append_array(&positions,++pos_index,pp);
+			SETBIT(1);
 		}
 	}
-	return pos;
+	// table copy
+	pos_index++;
+	m->dbgtbl = alloc_array(pos_index);
+	memcpy(val_array_ptr(m->dbgtbl),val_array_ptr(positions),pos_index * sizeof(value));
+	return m;
 }
 
 neko_module *neko_read_module( reader r, readp p, value loader ) {
-	unsigned int i;
+	register unsigned int i;
 	unsigned int itmp;
 	unsigned char t;
 	unsigned short stmp;
-	char *tmp = NULL;
+	register char *tmp = NULL;
 	int entry;
-	neko_module *m = (neko_module*)alloc(sizeof(neko_module));
+	register neko_module *m = (neko_module*)alloc(sizeof(neko_module));
+	neko_vm *vm = NEKO_VM();
 	READ_LONG(itmp);
 	if( itmp != 0x4F4B454E )
 		ERROR();
@@ -316,19 +352,13 @@ neko_module *neko_read_module( reader r, readp p, value loader ) {
 	tmp = alloc_private(sizeof(char)*(((m->codesize+1)>MAXSIZE)?(m->codesize+1):MAXSIZE));
 	m->jit = NULL;
 	m->jit_gc = NULL;
-	m->debuginf = val_null;
+	m->dbgtbl = val_null;
+	m->dbgidxs = NULL;
 	m->globals = (value*)alloc(m->nglobals * sizeof(value));
 	m->fields = (value*)alloc(sizeof(value*)*m->nfields);
-#ifdef NEKO_PROF
-	if( m->codesize >= PROF_SIZE )
-		ERROR();
-	m->code = (int_val*)alloc_private(sizeof(int_val)*(m->codesize+PROF_SIZE));
-	memset(m->code+PROF_SIZE,0,m->codesize*sizeof(int_val));
-#else
-	m->code = (int_val*)alloc_private(sizeof(int_val)*(m->codesize+1));
-#endif
 	m->loader = loader;
 	m->exports = alloc_object(NULL);
+	if( vm->fstats ) vm->fstats(vm,"neko_read_module_data",1);
 	alloc_field(m->exports,neko_id_module,alloc_abstract(neko_kind_module,m));
 	// Init global table
 	for(i=0;i<m->nglobals;i++) {
@@ -356,8 +386,7 @@ neko_module *neko_read_module( reader r, readp p, value loader ) {
 			m->globals[i] = alloc_float( atof(tmp) );
 			break;
 		case 5:
-			m->debuginf = read_debug_infos(r,p,tmp);
-			if( m->debuginf == NULL || val_array_size(m->debuginf) != m->codesize )
+			if( !read_debug_infos(r,p,tmp,m) )
 				ERROR();
 			m->globals[i] = val_null;
 			break;
@@ -371,6 +400,18 @@ neko_module *neko_read_module( reader r, readp p, value loader ) {
 			ERROR();
 		m->fields[i] = alloc_string(tmp);
 	}
+	if( vm->fstats ) {
+		vm->fstats(vm,"neko_read_module_data",0);
+		vm->fstats(vm,"neko_read_module_code",1);
+	}
+	#ifdef NEKO_PROF
+		if( m->codesize >= PROF_SIZE )
+			ERROR();
+		m->code = (int_val*)alloc_private(sizeof(int_val)*(m->codesize+PROF_SIZE));
+		memset(m->code+PROF_SIZE,0,m->codesize*sizeof(int_val));
+	#else
+		m->code = (int_val*)alloc_private(sizeof(int_val)*(m->codesize+1));
+	#endif
 	i = 0;
 	// Unpack opcodes
 	while( i < m->codesize ) {
@@ -402,9 +443,13 @@ neko_module *neko_read_module( reader r, readp p, value loader ) {
 	tmp[i] = 1;
 	m->code[i] = Last;
 	entry = (int)m->code[1];
+	if( vm->fstats ) {
+		vm->fstats(vm,"neko_read_module_code",0);
+		vm->fstats(vm,"neko_read_module_check",1);
+	}
 	// Check bytecode
 	for(i=0;i<m->codesize;i++) {
-		int c = (int)m->code[i];
+		register int c = (int)m->code[i];
 		itmp = (unsigned int)m->code[i+1];
 		if( c >= Last || tmp[i+1] == parameter_table[c] )
 			ERROR();
@@ -490,7 +535,7 @@ neko_module *neko_read_module( reader r, readp p, value loader ) {
 		unsigned char *stmp = (unsigned char*)alloc_private(m->codesize+1);
 		unsigned int prev = 0;
 		memset(stmp,UNKNOWN,m->codesize+1);
-		if( !neko_check_stack(m,stmp,0,0,0) )
+		if( !vm->trusted_code && !neko_check_stack(m,stmp,0,0,0) )
 			ERROR();
 		for(i=0;i<m->nglobals;i++) {
 			vfunction *f = (vfunction*)m->globals[i];
@@ -498,16 +543,32 @@ neko_module *neko_read_module( reader r, readp p, value loader ) {
 				itmp = (unsigned int)(int_val)f->addr;
 				if( itmp >= m->codesize || !tmp[itmp] || itmp < prev )
 					ERROR();
-				if( !neko_check_stack(m,stmp,itmp,f->nargs,f->nargs) )
+				if( !vm->trusted_code && !neko_check_stack(m,stmp,itmp,f->nargs,f->nargs) )
 					ERROR();
 				f->addr = m->code + itmp;
 				prev = itmp;
 			}
 		}
 	}
+	if( vm->fstats ) vm->fstats(vm,"neko_read_module_check",0);
 	// jit ?
-	if( NEKO_VM()->run_jit )
+	if( vm->run_jit ) {
+		if( vm->fstats ) vm->fstats(vm,"neko_read_module_jit",1);
 		neko_module_jit(m);
+		if( vm->fstats ) vm->fstats(vm,"neko_read_module_jit",0);
+	}
+#	ifdef NEKO_DIRECT_THREADED
+	{
+		int_val *jtbl = neko_get_ttable();
+		if( vm->fstats ) vm->fstats(vm,"neko_read_module_thread",1);
+		for(i=0;i<=m->codesize;i++) {
+			int_val c = m->code[i];
+			m->code[i] = jtbl[c];
+			i += parameter_table[c];
+		}
+		if( vm->fstats ) vm->fstats(vm,"neko_read_module_thread",0);
+	}
+#	endif
 	return m;
 }
 
