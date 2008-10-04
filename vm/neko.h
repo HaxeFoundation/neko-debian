@@ -72,12 +72,16 @@
 #	define NEKO_DIRECT_THREADED
 #endif
 
+#ifndef NEKO_NO_THREADS
+#	define NEKO_THREADS
+#endif
+
 #include <stddef.h>
 #ifndef NEKO_VCC
 #	include <stdint.h>
 #endif
 
-#define NEKO_VERSION	170
+#define NEKO_VERSION	180
 
 typedef intptr_t int_val;
 
@@ -161,6 +165,11 @@ typedef struct {
 	int nitems;
 } vhash;
 
+struct _mt_local;
+struct _mt_lock;
+typedef struct _mt_local mt_local;
+typedef struct _mt_lock mt_lock;
+
 #define val_tag(v)			(*(val_type*)(v))
 #define val_is_null(v)		((v) == val_null)
 #define val_is_int(v)		((((int)(int_val)(v)) & 1) != 0)
@@ -213,14 +222,8 @@ typedef struct {
 #	define IMPORT
 #endif
 
-#if defined(NEKO_SOURCES)
+#if defined(NEKO_SOURCES) || defined(NEKO_STANDALONE)
 #	define EXTERN EXPORT
-#elif defined(NEKO_INSTALLER)
-#	define EXTERN
-#	undef EXPORT
-#	undef IMPORT
-#	define EXPORT
-#	define IMPORT
 #else
 #	define EXTERN IMPORT
 #endif
@@ -241,7 +244,8 @@ typedef struct {
 #endif
 
 #define alloc_int32(i) alloc_abstract(k_int32, (value)(int_val)(i))
-#define need_32_bits(i) ( ((unsigned int)i) & 0xC0000000 )
+// the two upper bits must be either 00 or 11
+#define need_32_bits(i) ( ((((unsigned int)i) >> 30) + 1) & 2 )
 #define alloc_best_int(i) (need_32_bits(i) ? alloc_int32(i) : alloc_int(i))
 #define val_int32(v) (val_is_int(v)?val_int(v):(int)(int_val)val_data(v))
 #define val_is_int32(v) (val_is_int(v) || val_is_kind(v,k_int32))
@@ -254,12 +258,23 @@ typedef struct {
 #	define CONV_FLOAT
 #endif
 
+#ifdef NEKO_POSIX
+#	include <errno.h>
+#	define POSIX_LABEL(name)	name:
+#	define HANDLE_EINTR(label)	if( errno == EINTR ) goto label
+#	define HANDLE_FINTR(f,label) if( ferror(f) && errno == EINTR ) goto label
+#else
+#	define POSIX_LABEL(name)
+#	define HANDLE_EINTR(label)
+#	define HANDLE_FINTR(f,label)
+#endif
+
 #define VAR_ARGS (-1)
 #define DEFINE_PRIM_MULT(func) C_FUNCTION_BEGIN EXPORT void *func##__MULT() { return (void*)(&func); } C_FUNCTION_END
 #define DEFINE_PRIM(func,nargs) C_FUNCTION_BEGIN EXPORT void *func##__##nargs() { return (void*)(&func); } C_FUNCTION_END
 #define DEFINE_KIND(name) int_val __kind_##name = 0; vkind name = (vkind)&__kind_##name;
 
-#ifdef NEKO_INSTALLER
+#ifdef NEKO_STANDALONE
 #	define DEFINE_ENTRY_POINT(name)
 #else
 #	define DEFINE_ENTRY_POINT(name) C_FUNCTION_BEGIN void name(); EXPORT void *__neko_entry_point() { return &name; } C_FUNCTION_END
@@ -317,6 +332,16 @@ typedef struct {
 #define k_int32				neko_k_int32
 #define k_hash				neko_k_hash
 #define kind_share			neko_kind_share
+
+#define alloc_local			neko_alloc_local
+#define local_get			neko_local_get
+#define local_set			neko_local_set
+#define free_local			neko_free_local
+#define alloc_lock			neko_alloc_lock
+#define lock_acquire		neko_lock_acquire
+#define lock_try			neko_lock_try
+#define lock_release		neko_lock_release
+#define free_lock			neko_free_lock
 
 C_FUNCTION_BEGIN
 
@@ -377,6 +402,18 @@ C_FUNCTION_BEGIN
 
 	EXTERN void kind_share( vkind *k, const char *name );
 	EXTERN void _neko_failure( value msg, const char *file, int line );
+
+	// MULTITHREADING API
+	EXTERN mt_local *alloc_local();
+	EXTERN void *local_get( mt_local *l );
+	EXTERN void local_set( mt_local *l, void *v );
+	EXTERN void free_local( mt_local *l );
+
+	EXTERN mt_lock *alloc_lock();
+	EXTERN void lock_acquire( mt_lock *l );
+	EXTERN int lock_try( mt_lock *l );
+	EXTERN void lock_release( mt_lock *l );	
+	EXTERN void free_lock( mt_lock *l );
 
 C_FUNCTION_END
 

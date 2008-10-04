@@ -15,33 +15,43 @@
 /*																			*/
 /* ************************************************************************ */
 #include <string.h>
+#include <stdio.h>
 #include "neko.h"
 #include "objtable.h"
 #include "opcodes.h"
 #include "vm.h"
-//#define NEKO_GC
-#ifdef NEKO_GC
-#	include "gc.h"
-#else
-#	ifdef NEKO_WINDOWS
-#		ifdef NEKO_INSTALLER
-#			define GC_NOT_DLL
-#		else
-#			define GC_DLL
-#		endif
-#		define GC_WIN32_THREADS
-#	endif
-#	define GC_THREADS
-#	include "gc/gc.h"
+#include "neko_mod.h"
+#include "neko_vm.h"
+
+#ifdef NEKO_POSIX
+#	include <signal.h>
 #endif
+
+#ifdef NEKO_WINDOWS
+#	ifdef NEKO_STANDALONE
+#		define GC_NOT_DLL
+#	else
+#		define GC_DLL
+#	endif
+#	define GC_WIN32_THREADS
+#endif
+
+#define GC_THREADS
+#include "gc/gc.h"
 
 #ifndef GC_MALLOC
 #	error Looks like libgc was not installed, please install it before compiling
 #else
 
-#ifndef NEKO_WINDOWS
-#	include <pthread.h>
-#endif
+// activate to get debug informations about the GC
+// #define GC_LOG
+
+#define gc_alloc			GC_MALLOC
+#define gc_alloc_private	GC_MALLOC_ATOMIC
+#define gc_alloc_big(n)			(((n) > 256) ? GC_MALLOC_IGNORE_OFF_PAGE(n) : GC_MALLOC(n))
+#define gc_alloc_private_big(n)	(((n) > 256) ? GC_MALLOC_ATOMIC_IGNORE_OFF_PAGE(n) : GC_MALLOC_ATOMIC(n))
+#define gc_alloc_root		GC_MALLOC_UNCOLLECTABLE
+#define gc_free_root		GC_FREE
 
 typedef struct _klist {
 	const char *name;
@@ -54,8 +64,8 @@ static value *apply_string = NULL;
 int_val *callback_return = &op_last;
 value *neko_builtins = NULL;
 objtable *neko_fields = NULL;
-_clock *neko_fields_lock = NULL;
-_context *neko_vm_context = NULL;
+mt_lock *neko_fields_lock = NULL;
+mt_local *neko_vm_context = NULL;
 static val_type t_null = VAL_NULL;
 static val_type t_true = VAL_BOOL;
 static val_type t_false = VAL_BOOL;
@@ -76,16 +86,43 @@ field id_get, id_set;
 field id_add, id_radd, id_sub, id_rsub, id_mult, id_rmult, id_div, id_rdiv, id_mod, id_rmod;
 EXTERN field neko_id_module;
 
-#ifndef NEKO_GC
+#if defined (GC_LOG) && defined(NEKO_POSIX) 
+static void handle_signal( int signal ) {
+	// reset to default handler
+	struct sigaction act;
+	act.sa_sigaction = NULL;
+	act.sa_handler = SIG_DFL;
+	act.sa_flags = 0;
+	sigemptyset(&act.sa_mask);
+	sigaction(SIGSEGV,&act,NULL);
+	// print signal VM stack
+	printf("**** SIGNAL %d CAUGHT ****\n",signal);
+	neko_vm_dump_stack(neko_vm_current());
+	// signal again
+	raise(signal);
+}
+#endif
 
 static void null_warn_proc( char *msg, int arg ) {
+#	ifdef GC_LOG
+	printf(msg,arg);
+	if( strstr(msg,"very large block") )
+		neko_vm_dump_stack(neko_vm_current());
+#	endif
 }
 
-static void __on_finalize(value v, void *f ) {
-	((finalizer)f)(v);
-}
-
-void neko_gc_init( void *ptr ) {
+void neko_gc_init() {
+#	ifndef NEKO_WINDOWS
+	// we can't set this on windows with old GC since
+	// it's already initialized through its own DllMain
+	GC_all_interior_pointers = 0;
+#	endif
+#if (GC_VERSION_MAJOR >= 7) && defined(NEKO_WINDOWS)
+	GC_all_interior_pointers = 0;
+#	ifndef NEKO_STANDALONE
+	GC_use_DllMain();
+#	endif
+#endif
 	GC_init();
 	GC_no_dls = 1;
 #ifdef LOW_MEM
@@ -93,15 +130,17 @@ void neko_gc_init( void *ptr ) {
 #endif
 	GC_clear_roots();
 	GC_set_warn_proc((GC_warn_proc)(void*)null_warn_proc);
-}
-
-void neko_gc_close() {
-}
-
-void neko_gc_set_stack_base( void *ptr ) {
-}
-
+#if defined(GC_LOG) && defined(NEKO_POSIX)
+	{
+		struct sigaction act;
+		act.sa_sigaction = NULL;
+		act.sa_handler = handle_signal;
+		act.sa_flags = 0;
+		sigemptyset(&act.sa_mask);
+		sigaction(SIGSEGV,&act,NULL);
+	}
 #endif
+}
 
 EXTERN void neko_gc_loop() {
 	GC_collect_a_little();
@@ -116,77 +155,12 @@ EXTERN void neko_gc_stats( int *heap, int *free ) {
 	*free = (int)GC_get_free_bytes();
 }
 
-typedef struct {
-	thread_main_func init;
-	thread_main_func main;
-	void *param;
-#	ifdef NEKO_WINDOWS
-	HANDLE lock;
-#	else
-	pthread_mutex_t lock;
-#	endif
-} tparams;
-
-#ifdef NEKO_WINDOWS
-static DWORD WINAPI ThreadMain( void *_p ) {
-	tparams p = *(tparams*)_p;
-	p.init(p.param);
-	ReleaseSemaphore(p.lock,1,NULL);
-	return p.main(p.param);
-}
-#else
-static void *ThreadMain( void *_p ) {
-	tparams *lp = (tparams*)_p;
-	tparams p = *lp;
-	p.init(p.param);
-	// we have the 'param' value on this thread C stack
-	// so it's safe to give back control to main thread
-	pthread_mutex_unlock(&lp->lock);
-	return (void*)(int_val)p.main(p.param);
-}
-#endif
-
-EXTERN int neko_thread_create( thread_main_func init, thread_main_func main, void *param, void *handle ) {
-	tparams p;
-	p.init = init;
-	p.main = main;
-	p.param = param;
-#	ifdef NEKO_WINDOWS
-	{
-		HANDLE h;
-		p.lock = CreateSemaphore(NULL,0,1,NULL);
-		h = GC_CreateThread(NULL,0,ThreadMain,&p,0,handle);
-		if( h == NULL ) {
-			CloseHandle(p.lock);
-			return 0;
-		}
-		WaitForSingleObject(p.lock,INFINITE);
-		CloseHandle(p.lock);
-		CloseHandle(h);
-		return 1;
-	}
-#	else
-	pthread_mutex_init(&p.lock,NULL);
-	pthread_mutex_lock(&p.lock);
-	// force the use of a the GC method to capture created threads
-	// this function should be defined in gc/gc.h
-	if( GC_pthread_create((pthread_t*)handle,NULL,&ThreadMain,&p) != 0 ) {
-		pthread_mutex_destroy(&p.lock);
-		return 0;
-	}
-	pthread_mutex_lock(&p.lock);
-	pthread_mutex_destroy(&p.lock);
-	return 1;
-#	endif
-}
-
-
 EXTERN char *alloc( unsigned int nbytes ) {
-	return (char*)GC_MALLOC(nbytes);
+	return (char*)gc_alloc_big(nbytes);
 }
 
 EXTERN char *alloc_private( unsigned int nbytes ) {
-	return (char*)GC_MALLOC_ATOMIC(nbytes);
+	return (char*)gc_alloc_private_big(nbytes);
 }
 
 EXTERN value alloc_empty_string( unsigned int size ) {
@@ -195,7 +169,7 @@ EXTERN value alloc_empty_string( unsigned int size ) {
 		return (value)&empty_string;
 	if( size > max_string_size )
 		failure("max_string_size reached");
-	s = (vstring*)GC_MALLOC_ATOMIC(size+sizeof(vstring));
+	s = (vstring*)gc_alloc_private_big(size+sizeof(vstring));
 	s->t = VAL_STRING | (size << 3);
 	(&s->c)[size] = 0;
 	return (value)s;
@@ -208,7 +182,7 @@ EXTERN value alloc_string( const char *str ) {
 }
 
 EXTERN value alloc_float( tfloat f ) {
-	vfloat *v = (vfloat*)GC_MALLOC_ATOMIC(sizeof(vfloat));
+	vfloat *v = (vfloat*)gc_alloc_private(sizeof(vfloat));
 	v->t = VAL_FLOAT;
 	v->f = f;
 	return (value)v;
@@ -220,13 +194,13 @@ EXTERN value alloc_array( unsigned int n ) {
 		return (value)(void*)&empty_array;
 	if( n > max_array_size )
 		failure("max_array_size reached");
-	v = (value)GC_MALLOC(sizeof(varray)+(n - 1)*sizeof(value));
+	v = (value)gc_alloc_big(sizeof(varray)+(n - 1)*sizeof(value));
 	v->t = VAL_ARRAY | (n << 3);
 	return v;
 }
 
 EXTERN value alloc_abstract( vkind k, void *data ) {
-	vabstract *v = (vabstract*)GC_MALLOC(sizeof(vabstract));
+	vabstract *v = (vabstract*)gc_alloc(sizeof(vabstract));
 	v->t = VAL_ABSTRACT;
 	v->kind = k;
 	v->data = data;
@@ -237,7 +211,7 @@ EXTERN value alloc_function( void *c_prim, unsigned int nargs, const char *name 
 	vfunction *v;
 	if( c_prim == NULL || (nargs < 0 && nargs != VAR_ARGS) )
 		failure("alloc_function");
-	v = (vfunction*)GC_MALLOC(sizeof(vfunction));
+	v = (vfunction*)gc_alloc(sizeof(vfunction));
 	v->t = VAL_PRIMITIVE;
 	v->addr = c_prim;
 	v->nargs = nargs;
@@ -250,7 +224,7 @@ value neko_alloc_module_function( void *m, int_val pos, int nargs ) {
 	vfunction *v;
 	if( nargs < 0 && nargs != VAR_ARGS )
 		failure("alloc_module_function");
-	v = (vfunction*)GC_MALLOC(sizeof(vfunction));
+	v = (vfunction*)gc_alloc(sizeof(vfunction));
 	v->t = VAL_FUNCTION;
 	v->addr = (void*)pos;
 	v->nargs = nargs;
@@ -310,7 +284,7 @@ static value apply5( value p1, value p2, value p3, value p4, value p5 ) {
 }
 
 value neko_alloc_apply( int nargs, value env ) {
-	vfunction *v = (vfunction*)GC_MALLOC(sizeof(vfunction));
+	vfunction *v = (vfunction*)gc_alloc(sizeof(vfunction));
 	v->t = VAL_PRIMITIVE;
 	switch( nargs ) {
 	case 1: v->addr = apply1; break;
@@ -330,7 +304,7 @@ EXTERN value alloc_object( value cpy ) {
 	vobject *v;
 	if( cpy != NULL && !val_is_null(cpy) && !val_is_object(cpy) )
 		val_throw(alloc_string("$new")); // 'new' opcode simulate $new
-	v = (vobject*)GC_MALLOC(sizeof(vobject));
+	v = (vobject*)gc_alloc(sizeof(vobject));
 	v->t = VAL_OBJECT;
 	if( cpy == NULL || val_is_null(cpy) ) {
 		v->proto = NULL;
@@ -353,25 +327,25 @@ EXTERN void alloc_field( value obj, field f, value v ) {
 	otable_replace(((vobject*)obj)->table,f,v);
 }
 
+static void __on_finalize( value v, void *f ) {
+	((finalizer)f)(v);
+}
+
 EXTERN void val_gc(value v, finalizer f ) {
 	if( !val_is_abstract(v) )
 		failure("val_gc");
-#ifdef NEKO_GC
-	neko_gc_finalizer(v,(gc_final_fun)f);
-#else
 	if( f )
-		GC_register_finalizer(v,(GC_finalization_proc)__on_finalize,f,0,0);
+		GC_REGISTER_FINALIZER_NO_ORDER(v,(GC_finalization_proc)__on_finalize,f,0,0);
 	else
-		GC_register_finalizer(v,NULL,NULL,0,0);
-#endif
+		GC_REGISTER_FINALIZER_NO_ORDER(v,NULL,NULL,0,0);
 }
 
 EXTERN value *alloc_root( unsigned int nvals ) {
-	return (value*)GC_MALLOC_UNCOLLECTABLE(nvals*sizeof(value));
+	return (value*)gc_alloc_root(nvals*sizeof(value));
 }
 
 EXTERN void free_root(value *v) {
-	GC_free(v);
+	gc_free_root(v);
 }
 
 extern void neko_init_builtins();
@@ -381,16 +355,20 @@ extern void neko_free_jit();
 
 #define INIT_ID(x)	id_##x = val_id("__" #x)
 
-EXTERN void neko_global_init( void *s ) {
+EXTERN void neko_global_init() {
 #	ifdef NEKO_DIRECT_THREADED
 	op_last = neko_get_ttable()[Last];
 #	endif
 	empty_array.ptr = val_null;
-	neko_gc_init(s);
-	neko_vm_context = context_new();
-	neko_fields_lock = context_lock_new();
-	neko_fields = (objtable*)alloc_root(1);
-	*neko_fields = otable_empty();
+	neko_gc_init();
+	neko_vm_context = alloc_local();
+	neko_fields_lock = alloc_lock();
+	neko_fields = (objtable*)alloc_root(NEKO_FIELDS_MASK+1);
+	{
+		int i;
+		for(i=0;i<=NEKO_FIELDS_MASK;i++)
+			neko_fields[i] = otable_empty();
+	}
 	neko_init_builtins();
 	kind_names = (kind_list**)alloc_root(1);
 	*kind_names = NULL;
@@ -426,14 +404,13 @@ EXTERN void neko_global_free() {
 	free_root(neko_builtins);
 	free_root((value*)neko_fields);
 	apply_string = NULL;
-	context_delete(neko_vm_context);
-	context_lock_delete(neko_fields_lock);
+	free_local(neko_vm_context);
+	free_lock(neko_fields_lock);
 	neko_gc_major();
-	neko_gc_close();
 }
 
 EXTERN void neko_set_stack_base( void *s ) {
-	neko_gc_set_stack_base(s);
+	// deprecated
 }
 
 EXTERN void kind_share( vkind *k, const char *name ) {

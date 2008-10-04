@@ -1,8 +1,54 @@
-TODO :
-	FIX OO dispatch order for JIT (done for interp in 1.5.4)
-	OSX/Intel JIT
-	use pcre with UTF8 support on OSX ?
-	support the ~ operation
+2008-09-23 : 1.8.0
+	added mod_tora (neko application server)
+	changed mod_neko get_host_name : return the http host instead of the server IP
+	bugfix in nekoml : fixed usage of nekoml.std + added -nostd
+	std : added EINTR handling in send/recv socket operations and fread/fwrite
+	gc : upgraded windows version to 7.1
+	vm : fixed comparison of bool
+	vm : moved threads stuff into threads.c
+	nekoml : fixed lexing engine, allow escape sequences in char groups
+	mysql : link with thread_safe version on linux
+	std : fixed threads issues with host_resolve and host_reverse
+	libs : compile with -pthread on linux/osx to ensure thread safety
+	main : turned ON jit by default for bootable executables
+	std : added set_trusted primitive
+	gc : use alloc_ignore_off_page for large blocks
+	gc : use finalizers with no_order (prevent cycles)
+	mysql : prevent hashing the fields that looks like inner requests
+	vm : optimized global fields cache
+	std : string_split doesn't copy the string anymore if the pattern is not found
+	vm : added neko_vm_dump_stack
+	std : use per-thread locale on POSIX systems
+	std : url_encode does not encode anymore - and . chars
+	std : fixed sleep() for unix (more accurate and deal with signals)
+	std : added module_read_string and module_set_name
+	std : fixed some file descriptor issues with processes and threads
+	jit : fixed crash whith unsupported OO overloading
+	vm : added $getkind and $iskind builtins
+	std : added same_closure for closure comparison
+
+2008-07-28 : 1.7.1
+	nekotools : fixed set_return_code in web server
+	std : display windowed application in process_run
+	mod_neko : allowed to uncache module with set_main(null)
+	mod_neko : use strmcpi for set_header("Content-Type")
+	nekoc : one last fix for big arrays (first element was not compiled)
+	mod_neko : added get_http_method
+	nekoml : minor fixes in lexer
+	nekoml : added -pack and -use, auto build nekoml.std
+	include nekoml as part of standard distribution
+	vm/security : $smake now fills the string with 0
+	std/int32 : fixed need_32_bits macro (negative values)
+	bugfix : >> and >>> were reversed in JIT
+	bugfix : date functions are now MT-safe
+	removed context.h and context.c
+	added lock and tls multithread API to neko.h
+	std : added date_get_tz()
+	mod_neko : added log_message
+	regexp : fix for unmatched optional groups, return null instead of empty string
+	threads : for windows, use critical_section instead of mutex for locks
+	threads : for posix, use a recursive mutex which match windows behavior
+	std : added mutex and deque api (threads)
 
 2008-03-16 : 1.7.0
 	nekoc : allow binary ast format with -p, don't allow inline nxml

@@ -4,7 +4,7 @@
 version := $(shell dpkg-parsechangelog | grep ^Version | cut -d' ' -f2 | cut -d':' -f2)
 
 # Compile options
-cflags := -Wall -fPIC -fomit-frame-pointer -I vm -DCOMPACT_TABLE -g
+cflags := -Wall -fPIC -fomit-frame-pointer -I vm -DCOMPACT_TABLE -D_GNU_SOURCE -g
 ifeq (,$(findstring noopt,$(DEB_BUILD_OPTIONS)))
 	cflags += -O3
 else
@@ -19,8 +19,7 @@ endif
 # Use dpatch
 include /usr/share/dpatch/dpatch.make
 
-build: patch-stamp build-stamp
-build-stamp: 
+build-stamp: patch-stamp 
 	dh_testdir
 	make CFLAGS="$(cflags)" STRIP=$(stripcmd)
 	touch $@
@@ -52,8 +51,8 @@ binary-arch: build-stamp
 	dh_installman -pneko debian/neko.1 debian/nekoc.1 debian/nekotools.1
 	dh_compress -a
 	dh_fixperms -a
+	dh_makeshlibs -n -V 'neko (>= $(version))'
 	dh_installdeb -a
-	dh_makeshlibs -a -V 'neko (>= $(version))'
 	dh_shlibdeps -a -L neko -l debian/neko/usr/lib/neko
 	find $(debian)/neko -name '*.ndll' -exec chmod -x '{}' ';'
 	dh_gencontrol -a
@@ -63,6 +62,7 @@ binary-arch: build-stamp
 binary: binary-indep binary-arch
 
 clean: clean-patched unpatch
+
 clean-patched:
 	dh_testdir
 	dh_testroot

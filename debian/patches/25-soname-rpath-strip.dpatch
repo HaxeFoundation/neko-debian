@@ -7,12 +7,12 @@
 
 
 @DPATCH@
-diff -urNad neko-1.6.0~/Makefile neko-1.6.0/Makefile
---- neko-1.6.0~/Makefile	2007-11-27 20:01:09.000000000 +0100
-+++ neko-1.6.0/Makefile	2007-11-27 20:53:53.000000000 +0100
+diff -urNad neko-1.7.1~/Makefile neko-1.7.1/Makefile
+--- neko-1.7.1~/Makefile	2008-07-31 14:46:28.000000000 +0200
++++ neko-1.7.1/Makefile	2008-07-31 14:50:43.478590582 +0200
 @@ -4,12 +4,15 @@
  
- CFLAGS = -Wall -O3 -fPIC -fomit-frame-pointer -I vm -DCOMPACT_TABLE
+ CFLAGS = -Wall -O3 -fPIC -fomit-frame-pointer -I vm -D_GNU_SOURCE
  EXTFLAGS = -pthread
 -MAKESO = $(CC) -shared -WBsymbolic
 -LIBNEKO_NAME = libneko.so
@@ -30,7 +30,7 @@ diff -urNad neko-1.6.0~/Makefile neko-1.6.0/Makefile
  
  NEKO_EXEC = LD_LIBRARY_PATH=../bin:${LD_LIBRARY_PATH} NEKOPATH=../boot:../bin ../bin/neko
  
-@@ -118,16 +121,19 @@
+@@ -118,16 +121,20 @@
  
  bin/${LIBNEKO_NAME}: ${LIBNEKO_OBJECTS}
  	${MAKESO} ${EXTFLAGS} -o $@ ${LIBNEKO_OBJECTS} ${LIBNEKO_LIBS}
@@ -49,6 +49,7 @@ diff -urNad neko-1.6.0~/Makefile neko-1.6.0/Makefile
  clean:
  	rm -rf bin/${LIBNEKO_NAME} ${LIBNEKO_OBJECTS} ${VM_OBJECTS}
 +	rm -rf bin/libneko.so bin/libneko.so.${MAJOR}
++	rm -rf bin/nekoml.std
  	rm -rf bin/neko bin/nekoc bin/nekoml bin/nekotools
  	rm -rf bin/std bin/*.ndll bin/*.n libs/*/*.o
  	rm -rf src/*.n src/neko/*.n src/nekoml/*.n src/tools/*.n
