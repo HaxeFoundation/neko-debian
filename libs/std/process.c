@@ -56,6 +56,16 @@ DEFINE_KIND(k_process);
 	</p>
 	</doc>
 **/
+#ifndef NEKO_WINDOWS
+static int do_close( int fd ) {
+	POSIX_LABEL(close_again);
+	if( close(fd) != 0 ) {
+		HANDLE_EINTR(close_again);
+		return 1;
+	}
+	return 0;
+}
+#endif
 
 static void free_process( value vp ) {
 	vprocess *p = val_process(vp);
@@ -66,9 +76,9 @@ static void free_process( value vp ) {
 	CloseHandle(p->pinf.hProcess);
 	CloseHandle(p->pinf.hThread);
 #	else
-	close(p->eread);
-	close(p->oread);
-	close(p->iwrite);
+	do_close(p->eread);
+	do_close(p->oread);
+	do_close(p->iwrite);
 #	endif
 }
 
@@ -111,7 +121,7 @@ static value process_run( value cmd, value vargs ) {
 		memset(&sinf,0,sizeof(sinf));
 		sinf.cb = sizeof(sinf);
 		sinf.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
-		sinf.wShowWindow = SW_HIDE;
+		sinf.wShowWindow = SW_NORMAL;
 		CreatePipe(&oread,&sinf.hStdOutput,&sattr,0);
 		CreatePipe(&eread,&sinf.hStdError,&sattr,0);
 		CreatePipe(&sinf.hStdInput,&iwrite,&sattr,0);
@@ -157,9 +167,9 @@ static value process_run( value cmd, value vargs ) {
 		exit(1);
 	}
 	// parent
-	close(input[0]);
-	close(output[1]);
-	close(error[1]);
+	do_close(input[0]);
+	do_close(output[1]);
+	do_close(error[1]);
 	p->iwrite = input[1];
 	p->oread = output[0];
 	p->eread = error[0];
@@ -271,8 +281,9 @@ static value process_stdin_close( value vp ) {
 	if( !CloseHandle(p->iwrite) )
 		neko_error();
 #	else
-	if( close(p->iwrite) != 0 )
+	if( do_close(p->iwrite) )
 		neko_error();
+	p->iwrite = -1;
 #	endif
 	return val_null;
 }

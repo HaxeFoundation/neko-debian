@@ -123,6 +123,13 @@ static value socket_new( value udp ) {
 #	ifdef NEKO_MAC
 	setsockopt(s,SOL_SOCKET,SO_NOSIGPIPE,NULL,0);
 #	endif
+#	ifdef NEKO_POSIX
+	// we don't want sockets to be inherited in case of exec
+	{
+		int old = fcntl(s,F_GETFD,0);
+		if( old >= 0 ) fcntl(s,F_SETFD,old|FD_CLOEXEC);
+	}
+#	endif
 	return alloc_abstract(k_socket,(value)(int_val)s);
 }
 
@@ -132,7 +139,10 @@ static value socket_new( value udp ) {
 **/
 static value socket_close( value o ) {
 	val_check_kind(o,k_socket);
-	closesocket(val_sock(o));
+	POSIX_LABEL(close_again);
+	if( closesocket(val_sock(o)) ) {
+		HANDLE_EINTR(close_again);
+	}
 	val_kind(o) = NULL;
 	return val_true;
 }
@@ -150,8 +160,11 @@ static value socket_send_char( value o, value v ) {
 	if( c < 0 || c > 255 )
 		neko_error();
 	cc = (unsigned char)c;
-	if( send(val_sock(o),&cc,1,MSG_NOSIGNAL) == SOCKET_ERROR )
+	POSIX_LABEL(send_char_again);
+	if( send(val_sock(o),&cc,1,MSG_NOSIGNAL) == SOCKET_ERROR ) {
+		HANDLE_EINTR(send_char_again);
 		return block_error();
+	}
 	return val_true;
 }
 
@@ -193,9 +206,12 @@ static value socket_recv( value o, value data, value pos, value len ) {
 	dlen = val_strlen(data);
 	if( p < 0 || l < 0 || p > dlen || p + l > dlen )
 		neko_error();
+	POSIX_LABEL(recv_again);
 	dlen = recv(val_sock(o), val_string(data) + p , l, MSG_NOSIGNAL);
-	if( dlen == SOCKET_ERROR )
+	if( dlen == SOCKET_ERROR ) {
+		HANDLE_EINTR(recv_again);
 		return block_error();
+	}
 	return alloc_int(dlen);
 }
 
@@ -204,10 +220,17 @@ static value socket_recv( value o, value data, value pos, value len ) {
 	<doc>Read a single char from a connected socket.</doc>
 **/
 static value socket_recv_char( value o ) {
+	int ret;
 	unsigned char cc;
 	val_check_kind(o,k_socket);
-	if( recv(val_sock(o),&cc,1,MSG_NOSIGNAL) <= 0 )
+	POSIX_LABEL(recv_char_again);
+	ret = recv(val_sock(o),&cc,1,MSG_NOSIGNAL);
+	if( ret == SOCKET_ERROR ) {
+		HANDLE_EINTR(recv_char_again);
 		return block_error();
+	}
+	if( ret == 0 )
+		neko_error();
 	return alloc_int(cc);
 }
 
@@ -224,9 +247,12 @@ static value socket_write( value o, value data ) {
 	cdata = val_string(data);
 	datalen = val_strlen(data);
 	while( datalen > 0 ) {
+		POSIX_LABEL(write_again);
 		slen = send(val_sock(o),cdata,datalen,MSG_NOSIGNAL);
-		if( slen == SOCKET_ERROR )
+		if( slen == SOCKET_ERROR ) {
+			HANDLE_EINTR(write_again);
 			return block_error();
+		}
 		cdata += slen;
 		datalen -= slen;
 	}
@@ -247,9 +273,12 @@ static value socket_read( value o ) {
 	val_check_kind(o,k_socket);
 	b = alloc_buffer(NULL);
 	while( true ) {
+		POSIX_LABEL(read_again);
 		len = recv(val_sock(o),buf,256,MSG_NOSIGNAL);
-		if( len == SOCKET_ERROR )
+		if( len == SOCKET_ERROR ) {
+			HANDLE_EINTR(read_again);
 			return block_error();
+		}
 		if( len == 0 )
 			break;
 		buffer_append_sub(b,buf,len);
@@ -266,7 +295,15 @@ static value host_resolve( value host ) {
 	val_check(host,string);
 	ip = inet_addr(val_string(host));
 	if( ip == INADDR_NONE ) {
-		struct hostent *h = gethostbyname(val_string(host));
+		struct hostent *h;
+#	ifdef NEKO_WINDOWS
+		h = gethostbyname(val_string(host));
+#	else
+		struct hostent hbase;
+		char buf[1024];
+		int errcode;
+		gethostbyname_r(val_string(host),&hbase,buf,1024,&h,&errcode);
+#	endif
 		if( h == NULL )
 			neko_error();
 		ip = *((unsigned int*)h->h_addr);
@@ -294,7 +331,14 @@ static value host_reverse( value host ) {
 	unsigned int ip;
 	val_check(host,int32);
 	ip = val_int32(host);
+#	ifdef NEKO_WINDOWS
 	h = gethostbyaddr((char *)&ip,4,AF_INET);
+#	else
+	struct hostent htmp;
+	int errcode;
+	char buf[1024];
+	gethostbyaddr_r((char *)&ip,4,AF_INET,&htmp,buf,1024,&h,&errcode);
+#	endif
 	if( h == NULL )
 		neko_error();
 	return alloc_string( h->h_name );
@@ -399,27 +443,22 @@ static value socket_select( value rs, value ws, value es, value timeout ) {
 	fd_set rx, wx, ex;
 	fd_set *ra, *wa, *ea;
 	value r;
-	while( true ) {
-		ra = make_socket_array(rs,&rx,&n);
-		wa = make_socket_array(ws,&wx,&n);
-		ea = make_socket_array(es,&ex,&n);
-		if( ra == &INVALID || wa == &INVALID || ea == &INVALID )
-			neko_error();
-		if( val_is_null(timeout) )
-			tt = NULL;
-		else {
-			val_check(timeout,number);
-			tt = &tval;
-			init_timeval(val_number(timeout),tt);
-		}
-		if( select((int)(n+1),ra,wa,ea,tt) == SOCKET_ERROR ) {
-#			if defined(NEKO_POSIX)
-			if( errno == EINTR )
-				continue;
-#			endif
-			neko_error();
-		}
-		break;
+	POSIX_LABEL(select_again);
+	ra = make_socket_array(rs,&rx,&n);
+	wa = make_socket_array(ws,&wx,&n);
+	ea = make_socket_array(es,&ex,&n);
+	if( ra == &INVALID || wa == &INVALID || ea == &INVALID )
+		neko_error();
+	if( val_is_null(timeout) )
+		tt = NULL;
+	else {
+		val_check(timeout,number);
+		tt = &tval;
+		init_timeval(val_number(timeout),tt);
+	}
+	if( select((int)(n+1),ra,wa,ea,tt) == SOCKET_ERROR ) {
+		HANDLE_EINTR(select_again);
+		neko_error();
 	}
 	r = alloc_array(3);
 	val_array_ptr(r)[0] = make_array_result(rs,ra);
@@ -705,13 +744,10 @@ static value socket_poll_events( value pdata, value timeout ) {
 	val_check(timeout,number);
 	p = val_poll(pdata);
 	tot = p->rcount + p->wcount;
-	while( true ) {
-		if( poll(p->fds,tot,(int)(val_number(timeout) * 1000)) < 0 ) {
-			if( errno == EINTR )
-				continue;
-			neko_error();
-		}
-		break;
+	POSIX_LABEL(poll_events_again);
+	if( poll(p->fds,tot,(int)(val_number(timeout) * 1000)) < 0 ) {
+		HANDLE_EINTR(poll_events_again);
+		neko_error();
 	}
 	k = 0;
 	for(i=0;i<p->rcount;i++)
