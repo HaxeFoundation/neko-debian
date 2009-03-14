@@ -1,3 +1,40 @@
+neko (1.8.0-2) unstable; urgency=low
+
+  * Promoted libneko to a proper shared library living in /usr/lib.
+    (Closes: #509454)    
+  * No need to Build-Conflict with itself because all rpaths have been
+    removed.
+  * Use quilt instead of dpatch for patches, and describe how to use
+    quilt in Debian.source (thanks to Russ Allbery).
+  * Strip all shared libraries.
+  * Put test.n and test.neko in examples directory.
+  * Added a Vcs-Hg control filed to indicate the location of the public
+    repository.
+  * Bumped the Standards-Version to 3.8.0.
+
+ -- Jens Peter Secher <jps@debian.org>  Sat, 14 Mar 2009 21:01:12 +0100
+
+neko (1.8.0-1) experimental; urgency=low
+
+  * New upstream release.
+  * Bumped debhelper version to 6.
+
+ -- Jens Peter Secher <jps@debian.org>  Sat, 04 Oct 2008 16:44:58 +0200
+
+neko (1.7.1-1~bpo40+1) etch-backports; urgency=low
+
+  * Backport to Etch (no change).
+
+ -- Jens Peter Secher <jps@debian.org>  Sun, 03 Aug 2008 13:32:05 +0200
+
+neko (1.7.1-1) unstable; urgency=low
+
+  * New upstream release.
+  * Call dh_makeshlibs before dh_installdeb in debian/rules.
+  * Define _GNU_SOURCE to get threads to work.
+
+ -- Jens Peter Secher <jps@debian.org>  Thu, 31 Jul 2008 13:17:14 +0200
+
 neko (1.7.0-1) unstable; urgency=low
 
   * New upstream release.
@@ -166,4 +203,3 @@ neko (1.5-1) experimental; urgency=low
     Apache until we have made proper arrangements with the Apache team.
 
  -- Jens Peter Secher <jps@debian.org>  Mon,  6 Nov 2006 23:58:34 +0100
-

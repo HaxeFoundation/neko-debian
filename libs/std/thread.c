@@ -15,6 +15,9 @@
 /*																			*/
 /* ************************************************************************ */
 #include <neko_vm.h>
+#undef free_lock
+#undef lock_release
+
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,18 +41,25 @@ typedef struct _tqueue {
 } tqueue;
 
 typedef struct {
+	tqueue *first;
+	tqueue *last;
 #	ifdef NEKO_WINDOWS
-	DWORD tid;
 	CRITICAL_SECTION lock;
 	HANDLE wait;
 #	else
-	pthread_t phandle;
 	pthread_mutex_t lock;
 	pthread_cond_t wait;
 #	endif
-	tqueue *first;
-	tqueue *last;
+} vdeque;
+
+typedef struct {
+#	ifdef NEKO_WINDOWS
+	DWORD tid;
+#	else
+	pthread_t phandle;
+#	endif
 	value v;
+	vdeque q;
 } vthread;
 
 DECLARE_KIND(k_thread);
@@ -66,6 +76,84 @@ DECLARE_KIND(k_thread);
 #	define SIGNAL(l)	pthread_cond_signal(&(l))
 #endif
 
+/*
+	deque raw API
+*/
+static void _deque_init( vdeque *q ) {
+#	ifdef NEKO_WINDOWS
+	q->wait = CreateSemaphore(NULL,0,(1 << 30),NULL);
+	InitializeCriticalSection(&q->lock);
+#	else
+	pthread_mutex_init(&q->lock,NULL);
+	pthread_cond_init(&q->wait,NULL);
+#	endif
+}
+
+static void _deque_destroy( vdeque *q ) {
+#ifdef NEKO_WINDOWS
+	DeleteCriticalSection(&q->lock);
+	CloseHandle(q->wait);
+#else
+	pthread_mutex_destroy(&q->lock);
+	pthread_cond_destroy(&q->wait);
+#endif
+}
+
+static void _deque_add( vdeque *q, value msg ) {
+	tqueue *t;
+	t = (tqueue*)alloc(sizeof(tqueue));
+	t->msg = msg;
+	t->next = NULL;
+	LOCK(q->lock);
+	if( q->last == NULL )
+		q->first = t;
+	else
+		q->last->next = t;
+	q->last = t;
+	SIGNAL(q->wait);
+	UNLOCK(q->lock);
+}
+
+static void _deque_push( vdeque *q, value msg ) {
+	tqueue *t;
+	t = (tqueue*)alloc(sizeof(tqueue));
+	t->msg = msg;
+	LOCK(q->lock);
+	t->next = q->first;
+	q->first = t;
+	if( q->last == NULL )
+		q->last = t;
+	SIGNAL(q->wait);
+	UNLOCK(q->lock);
+}
+
+static value _deque_pop( vdeque *q, int block ) {
+	value msg;
+	LOCK(q->lock);
+	while( q->first == NULL )
+		if( block ) {
+#			ifdef NEKO_WINDOWS
+			UNLOCK(q->lock);
+			WaitForSingleObject(q->wait,INFINITE);
+			LOCK(q->lock);
+#			else
+			pthread_cond_wait(&q->wait,&q->lock);
+#			endif
+		} else {
+			UNLOCK(q->lock);
+			return val_null;
+		}
+	msg = q->first->msg;
+	q->first = q->first->next;
+	if( q->first == NULL )
+		q->last = NULL;
+	else
+		SIGNAL(q->wait);
+	UNLOCK(q->lock);
+	return msg;
+}
+
+
 /**
 	<doc>
 	<h1>Thread</h1>
@@ -77,6 +165,8 @@ DECLARE_KIND(k_thread);
 
 #define val_lock(l)		((vlock)val_data(l))
 #define val_tls(l)		((vtls*)val_data(l))
+#define val_mutex(l)	((mt_lock*)val_data(l))
+#define val_deque(l)	((vdeque*)val_data(l))
 
 typedef struct {
 #	ifdef NEKO_WINDOWS
@@ -89,6 +179,8 @@ typedef struct {
 DEFINE_KIND(k_thread);
 DEFINE_KIND(k_lock);
 DEFINE_KIND(k_tls);
+DEFINE_KIND(k_mutex);
+DEFINE_KIND(k_deque);
 
 typedef struct {
 	value callb;
@@ -103,13 +195,7 @@ static vthread *neko_thread_current() {
 
 static void free_thread( value v ) {
 	vthread *t = val_thread(v);
-#ifdef NEKO_WINDOWS
-	DeleteCriticalSection(&t->lock);
-	CloseHandle(t->wait);
-#else
-	pthread_mutex_destroy(&t->lock);
-	pthread_cond_destroy(&t->wait);
-#endif
+	_deque_destroy(&t->q);
 }
 
 static vthread *alloc_thread() {
@@ -117,19 +203,16 @@ static vthread *alloc_thread() {
 	memset(t,0,sizeof(vthread));
 #ifdef NEKO_WINDOWS
 	t->tid = GetCurrentThreadId();
-	t->wait = CreateSemaphore(NULL,0,1,NULL);
-	InitializeCriticalSection(&t->lock);
 #else
 	t->phandle = pthread_self();
-	pthread_mutex_init(&t->lock,NULL);
-	pthread_cond_init(&t->wait,NULL);
 #endif
 	t->v = alloc_abstract(k_thread,t);
+	_deque_init(&t->q);
 	val_gc(t->v,free_thread);
 	return t;
 }
 
-static int thread_init( void *_p ) {
+static void thread_init( void *_p ) {
 	tparams *p = (tparams*)_p;
 	neko_vm *vm;
 	p->t = alloc_thread();
@@ -137,10 +220,9 @@ static int thread_init( void *_p ) {
 	vm = neko_vm_alloc(NULL);
 	neko_vm_select(vm);
 	neko_vm_set_custom(vm,k_thread,p->t);
-	return 0;
 }
 
-static int thread_loop( void *_p ) {
+static void thread_loop( void *_p ) {
 	tparams *p = (tparams*)_p;
 	value exc = NULL;
 	val_callEx(val_null,p->callb,&p->callparam,1,&exc);
@@ -153,7 +235,7 @@ static int thread_loop( void *_p ) {
 	}
 	// cleanup
 	neko_vm_select(NULL);
-	return 0;
+	p->t->v = val_null;
 }
 
 /**
@@ -191,20 +273,9 @@ static value thread_current() {
 **/
 static value thread_send( value vt, value msg ) {
 	vthread *t;
-	tqueue *q;
 	val_check_kind(vt,k_thread);
 	t = val_thread(vt);
-	q = (tqueue*)alloc(sizeof(tqueue));
-	q->msg = msg;
-	q->next = NULL;
-	LOCK(t->lock);
-	if( t->last == NULL )
-		t->first = q;
-	else
-		t->last->next = q;
-	t->last = q;
-	SIGNAL(t->wait);
-	UNLOCK(t->lock);
+	_deque_add(&t->q,msg);
 	return val_null;
 }
 
@@ -220,33 +291,11 @@ static value thread_send( value vt, value msg ) {
 static value thread_read_message( value block ) {
 	value v = thread_current();
 	vthread *t;
-	value msg;
 	if( v == NULL )
 		neko_error();
 	t = val_thread(v);
 	val_check(block,bool);
-	LOCK(t->lock);
-	while( t->first == NULL )
-		if( val_bool(block) ) {
-#			ifdef NEKO_WINDOWS
-			UNLOCK(t->lock);
-			WaitForSingleObject(t->wait,INFINITE);
-			LOCK(t->lock);
-#			else
-			pthread_cond_wait(&t->wait,&t->lock);
-#			endif
-		} else {
-			UNLOCK(t->lock);
-			return val_null;
-		}
-	msg = t->first->msg;
-	t->first = t->first->next;
-	if( t->first == NULL )
-		t->last = NULL;
-	else
-		SIGNAL(t->wait);
-	UNLOCK(t->lock);
-	return msg;
+	return _deque_pop( &t->q, val_bool(block) );
 }
 
 static void free_lock( value l ) {
@@ -451,6 +500,108 @@ static value tls_set( value v, value content ) {
 	return val_null;
 }
 
+static void free_mutex( value v ) {
+	neko_free_lock( val_mutex(v) );
+}
+
+/**
+	mutex_create : void -> 'mutex
+	<doc>
+	Creates a mutex, which can be used to acquire a temporary lock to access some ressource.
+	The main difference with a lock is that a mutex must always be released by the owner thread.
+	</doc>
+**/
+static value mutex_create() {
+	mt_lock *m = neko_alloc_lock();
+	value v = alloc_abstract(k_mutex,m);
+	val_gc(v,free_mutex);
+	return v;
+}
+
+/**
+	mutex_acquire : 'mutex -> void
+	<doc>
+	The current thread acquire the mutex or wait if not available. The same thread can acquire
+	several times the same mutex but must release it as many times it has been acquired.
+	</doc>
+**/
+static value mutex_acquire( value m ) {
+	val_check_kind(m,k_mutex);
+	neko_lock_acquire( val_mutex(m) );
+	return val_null;
+}
+
+/**
+	mutex_try : 'mutex -> bool
+	<doc>
+	Try to acquire the mutex, returns true if acquire or false if it's already locked by another
+	thread.
+	</doc>
+**/
+static value mutex_try( value m ) {
+	val_check_kind(m,k_mutex);
+	return alloc_bool( neko_lock_try(val_mutex(m)) );	
+}
+
+/**
+	mutex_release : 'mutex -> void
+	<doc>
+	Release a mutex that has been acquired by the current thread. The behavior is undefined if the
+	current thread does not own the mutex.
+	</doc>
+**/
+static value mutex_release( value m ) {
+	val_check_kind(m,k_mutex);
+	neko_lock_release(val_mutex(m));
+	return val_null;
+}
+
+static void free_deque( value v ) {	
+	_deque_destroy(val_deque(v));
+}
+
+/**
+	deque_create : void -> 'deque
+	<doc>create a message queue for multithread access</doc>
+**/
+static value deque_create() {
+	vdeque *q = (vdeque*)alloc(sizeof(vdeque));
+	value v = alloc_abstract(k_deque,q);
+	val_gc(v,free_deque);
+	_deque_init(q);
+	return v;
+}
+
+/**
+	deque_add : 'deque -> any -> void
+	<doc>add a message at the end of the queue</doc>
+**/
+static value deque_add( value v, value i ) {
+	val_check_kind(v,k_deque);
+	_deque_add(val_deque(v),i);
+	return val_null;
+}
+
+/**
+	deque_push : 'deque -> any -> void
+	<doc>add a message at the head of the queue</doc>
+**/
+static value deque_push( value v, value i ) {
+	val_check_kind(v,k_deque);
+	_deque_push(val_deque(v),i);
+	return val_null;
+}
+
+/**
+	deque_pop : 'deque -> bool -> any?
+	<doc>pop a message from the queue head. Either block until a message is available or return immedialtly with null.</doc>
+**/
+static value deque_pop( value v, value block ) {
+	val_check_kind(v,k_deque);
+	val_check(block,bool);
+	return _deque_pop(val_deque(v),val_bool(block));
+}
+
 DEFINE_PRIM(thread_create,2);
 DEFINE_PRIM(thread_current,0);
 DEFINE_PRIM(thread_send,2);
@@ -464,3 +615,12 @@ DEFINE_PRIM(tls_create,0);
 DEFINE_PRIM(tls_set,2);
 DEFINE_PRIM(tls_get,1);
 
+DEFINE_PRIM(mutex_create,0);
+DEFINE_PRIM(mutex_acquire,1);
+DEFINE_PRIM(mutex_try,1);
+DEFINE_PRIM(mutex_release,1);
+
+DEFINE_PRIM(deque_create,0);
+DEFINE_PRIM(deque_add,2);
+DEFINE_PRIM(deque_push,2);
+DEFINE_PRIM(deque_pop,2);

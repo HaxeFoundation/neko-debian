@@ -1,0 +1,54 @@
+## tora-pwrite-diversion.dpatch by Jens Peter Secher <jps@debian.org>
+##
+## Rename function pwrite because unistd.h declares a pwrite.
+
+diff -urNad neko-1.8.0~/libs/mod_tora/protocol.c neko-1.8.0/libs/mod_tora/protocol.c
+--- neko-1.8.0~/libs/mod_tora/protocol.c	2008-10-04 17:31:32.000000000 +0200
++++ neko-1.8.0/libs/mod_tora/protocol.c	2008-10-04 17:32:26.795150195 +0200
+@@ -37,7 +37,7 @@
+ 			cursor++; \
+ 	}
+ 
+-static int pwrite( mcontext *c, const char *buf, int len ) {
++static int tora_pwrite( mcontext *c, const char *buf, int len ) {
+ 	while( len > 0 ) {
+ 		int k = send(c->sock,buf,len,MSG_NOSIGNAL);
+ 		if( k <= 0 ) return 0;
+@@ -47,7 +47,7 @@
+ 	return 1;
+ }
+ 
+-static int pread( mcontext *c, char *buf, int len ) {
++static int tora_pread( mcontext *c, char *buf, int len ) {
+ 	while( len > 0 ) {
+ 		int k = recv(c->sock,buf,len,MSG_NOSIGNAL);
+ 		if( k <= 0 ) return 0;
+@@ -63,8 +63,8 @@
+ 	h[1] = (unsigned char)len;
+ 	h[2] = (unsigned char)(len >> 8);
+ 	h[3] = (unsigned char)(len >> 16);
+-	pwrite(c,(char*)h,4);
+-	pwrite(c,str,len);
++	tora_pwrite(c,(char*)h,4);
++	tora_pwrite(c,str,len);
+ }
+ 
+ static void psend( mcontext *c, proto_code code, const char *str ) {
+@@ -329,7 +329,7 @@
+ 	int buflen = BUFSIZE;
+ 	*exc = 0;
+ 	while( true ) {
+-		if( !pread(c,header,4) )
++		if( !tora_pread(c,header,4) )
+ 			ABORT("Connection Closed");
+ 		len = header[1] | (header[2] << 8) | (header[3] << 16);
+ 		if( buflen <= len ) {
+@@ -338,7 +338,7 @@
+ 			free(buf);
+ 			buf = (char*)malloc(buflen);
+ 		}
+-		if( !pread(c,buf,len) )
++		if( !tora_pread(c,buf,len) )
+ 			ABORT("Connection Closed");
+ 		buf[len] = 0;
+ 		switch( *header ) {

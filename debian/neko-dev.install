@@ -1,0 +1,3 @@
+bin/*.so usr/lib
+vm/neko*.h usr/include
+

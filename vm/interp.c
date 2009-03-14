@@ -17,7 +17,6 @@
 #include <math.h>
 #include <string.h>
 #include <stdio.h>
-#include "context.h"
 #include "opcodes.h"
 #include "vm.h"
 #include "neko_mod.h"
@@ -135,17 +134,23 @@ EXTERN int neko_vm_jit( neko_vm *vm, int enable_jit ) {
 	return vm->run_jit;
 }
 
+EXTERN int neko_vm_trusted( neko_vm *vm, int t ) {
+	int old = vm->trusted_code;
+	vm->trusted_code = t;
+	return old;
+}
+
 EXTERN void neko_vm_set_stats( neko_vm *vm, neko_stat_func fstats, neko_stat_func pstats ) {
 	vm->fstats = fstats;
 	vm->pstats = pstats;
 }
 
 EXTERN void neko_vm_select( neko_vm *vm ) {
-	context_set(neko_vm_context,vm);
+	local_set(neko_vm_context,vm);
 }
 
 EXTERN neko_vm *neko_vm_current() {
-	return (neko_vm*)context_get(neko_vm_context);
+	return NEKO_VM();
 }
 
 EXTERN void *neko_vm_custom( neko_vm *vm, vkind k ) {
@@ -501,6 +506,34 @@ static value neko_flush_stack( int_val *cspup, int_val *csp, value old ) {
 			*st++ = *oldst++;
 	}
 	return stack_trace;
+}
+
+EXTERN void neko_vm_dump_stack( neko_vm *vm ) {
+	// we can't do any GC allocation here since we might hold the lock
+	int_val *cspup = vm->csp;
+	int_val *csp = vm->spmin - 1;
+	while( csp != cspup ) {
+		neko_module *m = (neko_module*)csp[4];
+		printf("Called from ");
+		if( m ) {
+			printf("%s ",val_string(m->name));
+			if( m->dbgidxs ) {
+				int ppc = (int)((((int_val**)csp)[1]-2) - m->code);
+				int idx = m->dbgidxs[ppc>>5].base + bitcount(m->dbgidxs[ppc>>5].bits >> (31 - (ppc & 31)));
+				value s = val_array_ptr(m->dbgtbl)[idx];
+				if( val_is_string(s) )
+					printf("%s",val_string(s));
+				else if( val_is_array(s) && val_array_size(s) == 2 && val_is_string(val_array_ptr(s)[0]) && val_is_int(val_array_ptr(s)[1]) )
+					printf("file %s line %d",val_string(val_array_ptr(s)[0]),val_int(val_array_ptr(s)[1]));
+				else
+					printf("???");
+			}
+		} else
+			printf("a C function");
+		csp += 4;
+		printf("\n");
+	}
+	fflush(stdout);
 }
 
 void neko_setup_trap( neko_vm *vm ) {
