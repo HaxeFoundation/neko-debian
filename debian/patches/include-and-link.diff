@@ -5,8 +5,8 @@
 
 Index: neko/src/tools/install.neko
 ===================================================================
---- neko.orig/src/tools/install.neko	2009-03-15 00:19:54.000000000 +0100
-+++ neko/src/tools/install.neko	2009-03-15 00:24:38.000000000 +0100
+--- neko.orig/src/tools/install.neko	2009-03-25 23:33:25.000000000 +0100
++++ neko/src/tools/install.neko	2009-03-25 23:35:52.000000000 +0100
 @@ -39,11 +39,6 @@
  // LIBS DATAS
  
@@ -43,7 +43,7 @@ Index: neko/src/tools/install.neko
  	},
  	mod_tora2 => {
  		src => $array("mod_tora","protocol"),
-@@ -101,15 +90,17 @@
+@@ -101,15 +90,16 @@
  
  // PLATFORM
  
@@ -52,18 +52,18 @@ Index: neko/src/tools/install.neko
  cc = getenv("CC");
  if( cc == null ) cc = "gcc";
  linkcmd = switch system { "BSD" => "ld" default => cc };
- linkneko = "-lneko";
+-linkneko = "-lneko";
 +
  linkoptions = switch system {
  	"Mac" => "-bundle -undefined dynamic_lookup -L../../bin -pthread"
 -	default => "-shared -L../../bin -pthread"
-+	default => "-shared -L../../bin -pthread -lneko" 
++	default => "-shared -L../../bin -pthread" 
  };
 +
  nekovm = switch system { "Windows" => "..\\bin\\neko" default => "../bin/neko" };
  
  if( osx_universal ) {
-@@ -132,38 +123,16 @@
+@@ -132,38 +122,15 @@
  search_includes = function(isap2) {
  	var inc1 = $array(
  		"/usr/include",
@@ -101,10 +101,29 @@ Index: neko/src/tools/install.neko
 -		);
 +	inc2 = $array(
 +		"/usr/include/apache2",
-+		"/opt/local/apache2/include",
 +		"/usr/include/apr-1",
 +		"/usr/include/apr-1.0",
 +	);
  	return $aconcat($array(inc1,inc2));
  }
  
+@@ -171,10 +138,6 @@
+ 	"../../libs/include",
+ 	"/usr/lib",
+ 	"/usr/lib/mysql",
+-	"/usr/local/lib",
+-	"/usr/local/lib/mysql",
+-	"/opt/local/lib",
+-	"/opt/local/lib/mysql",
+ );
+ 
+ exec = function(cmd) {
+@@ -283,8 +246,6 @@
+ link = function(files,target,params1,params2) {
+ 	files = make("",map(files,function(f){ f + ".o" }));
+ 	var opt = linkoptions;
+-	if( target != "mod_tora" && target != "mod_tora2" )
+-		opt += " "+linkneko;
+ 	var cmd = linkcmd+" "+opt+" "+make("-L",libraries);
+ 	var out = " -o ../../bin/"+target+".ndll ";
+ 	exec(cmd+out+params1+files+params2);

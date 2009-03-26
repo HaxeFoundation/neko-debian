@@ -6,9 +6,9 @@
 
 Index: neko/Makefile
 ===================================================================
---- neko.orig/Makefile	2009-03-15 13:56:52.000000000 +0100
-+++ neko/Makefile	2009-03-15 14:08:49.000000000 +0100
-@@ -4,11 +4,13 @@
+--- neko.orig/Makefile	2009-03-25 23:23:28.000000000 +0100
++++ neko/Makefile	2009-03-25 23:25:03.000000000 +0100
+@@ -4,24 +4,17 @@
  
  CFLAGS = -Wall -O3 -fPIC -fomit-frame-pointer -I vm -D_GNU_SOURCE
  EXTFLAGS = -pthread
@@ -16,19 +16,96 @@ Index: neko/Makefile
 -LIBNEKO_NAME = libneko.so
 +MAJOR=0
 +MINOR=0
-+MAKESO = $(CC) -shared -Wl,-soname,libneko.so.${MAJOR}
++MAKESO = $(CC) -shared
 +LIBNEKO_NAME = libneko.so.${MAJOR}.${MINOR}
  LIBNEKO_LIBS = -ldl -lgc -lm
  NEKOVM_FLAGS = -Lbin -lneko
 -STD_NDLL_FLAGS = ${NEKOVM_FLAGS}
-+STD_NDLL_FLAGS = ${NEKOVM_FLAGS} -lm
++STD_NDLL_FLAGS = -lm
  INSTALL_FLAGS =
  
  NEKO_EXEC = LD_LIBRARY_PATH=../bin:${LD_LIBRARY_PATH} NEKOPATH=../boot:../bin ../bin/neko
-@@ -118,16 +120,19 @@
+ 
+-# For OSX
+-#
+-# MACOSX = 1
+-
+-# For OSX Universal Binaries
+-#
+-# OSX_UNIVERSAL = 1
+-
+-
+ # For 64 bit
+ #
+ # CFLAGS += -D_64BITS
+@@ -34,51 +27,6 @@
+ #
+ # CFLAGS += -DLOW_MEM
+ 
+-# For MINGW/MSYS
+-
+-ifeq (${WIN32}, 1)
+-CFLAGS = -g -Wall -O3 -momit-leaf-frame-pointer -I vm -I /usr/local/include
+-EXTFLAGS =
+-MAKESO = $(CC) -O -shared
+-LIBNEKO_NAME = neko.dll
+-LIBNEKO_LIBS = -Lbin -lgc
+-STD_NDLL_FLAGS = ${NEKOVM_FLAGS} -lws2_32
+-endif
+-
+-### OSX SPECIFIC
+-
+-ifeq (${UNIVERSAL},1)
+-MACOSX=1
+-OSX_UNIVERSAL=1
+-endif
+-
+-ifeq (${MACOSX}, 1)
+-export MACOSX_DEPLOYMENT_TARGET=10.3
+-EXTFLAGS =
+-MAKESO = ${CC}
+-LIBNEKO_NAME = libneko.dylib
+-LIBNEKO_INSTALL = -install_name @executable_path/${LIBNEKO_NAME}
+-LIBNEKO_LIBS = -ldl -lgc -lm -dynamiclib -single_module ${LIBNEKO_INSTALL}
+-NEKOVM_FLAGS = -L${PWD}/bin -lneko
+-STD_NDLL_FLAGS = -bundle -undefined dynamic_lookup ${NEKOVM_FLAGS}
+-
+-ifeq (${OSX_UNIVERSAL}, 1)
+-
+-export MACOSX_DEPLOYMENT_TARGET_i386=10.4
+-export MACOSX_DEPLOYMENT_TARGET_ppc=10.3
+-CFLAGS += -arch ppc -arch i386 -L/usr/local/lib
+-UNIV = libs/include/osx_universal
+-#linking to shared lib (.a) explicitly:
+-LIBNEKO_DEPS = ${UNIV}/libgc.a  -lSystemStubs
+-LIBNEKO_LIBS = ${LIBNEKO_DEPS} -dynamiclib -single_module ${LIBNEKO_INSTALL} ${CFLAGS}
+-NEKOVM_FLAGS = -L${PWD}/bin -lneko
+-STD_NDLL_FLAGS = -bundle ${NEKOVM_FLAGS} ${CFLAGS}
+-INSTALL_FLAGS = -osx-universal
+-
+-endif
+-
+-endif
+-
+ ### MAKE
+ 
+ VM_OBJECTS = vm/stats.o vm/main.o
+@@ -87,9 +35,6 @@
+ 
+ all: createbin libneko neko std compiler libs
+ 
+-universal:
+-	make MACOSX=1 OSX_UNIVERSAL=1
+-
+ createbin:
+ 	-mkdir bin 2>/dev/null
+ 
+@@ -117,17 +62,20 @@
+ 	(cd src; ${NEKO_EXEC} nekoc -link ../boot/nekoml.n nekoml/Main)
  
  bin/${LIBNEKO_NAME}: ${LIBNEKO_OBJECTS}
- 	${MAKESO} ${EXTFLAGS} -o $@ ${LIBNEKO_OBJECTS} ${LIBNEKO_LIBS}
+-	${MAKESO} ${EXTFLAGS} -o $@ ${LIBNEKO_OBJECTS} ${LIBNEKO_LIBS}
++	${MAKESO} -Wl,-soname,libneko.so.${MAJOR} ${EXTFLAGS} -o $@ ${LIBNEKO_OBJECTS} ${LIBNEKO_LIBS}
 +	ln -s ${LIBNEKO_NAME} bin/libneko.so
 +	ln -s ${LIBNEKO_NAME} bin/libneko.so.${MAJOR}
  

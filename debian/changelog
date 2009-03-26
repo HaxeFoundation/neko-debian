@@ -1,3 +1,12 @@
+neko (1.8.0-3) unstable; urgency=low
+
+  * Fix build failure on MIPS by tightening up the linking process.
+  * Make neko-dev architecture independent since there are no binary files
+    in neko-dev.
+  * Bumped the Standards-Version to 3.8.1.
+
+ -- Jens Peter Secher <jps@debian.org>  Thu, 26 Mar 2009 20:00:40 +0100
+
 neko (1.8.0-2) unstable; urgency=low
 
   * Promoted libneko to a proper shared library living in /usr/lib.

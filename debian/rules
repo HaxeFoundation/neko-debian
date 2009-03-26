@@ -23,15 +23,15 @@ overrides := usr/share/lintian/overrides
 binary-indep: build-stamp
 	dh_testdir
 	dh_testroot
-	dh_install -plibapache2-mod-neko
-	dh_installdocs -plibapache2-mod-neko
-	dh_installchangelogs -plibapache2-mod-neko CHANGES
-	dh_compress -plibapache2-mod-neko
-	dh_fixperms -plibapache2-mod-neko
-	dh_installdeb -plibapache2-mod-neko
-	dh_gencontrol -plibapache2-mod-neko
-	dh_md5sums -plibapache2-mod-neko
-	dh_builddeb -plibapache2-mod-neko
+	dh_install -plibapache2-mod-neko -pneko-dev
+	dh_installdocs -plibapache2-mod-neko -pneko-dev
+	dh_installchangelogs -plibapache2-mod-neko -pneko-dev CHANGES
+	dh_compress -plibapache2-mod-neko -pneko-dev
+	dh_fixperms -plibapache2-mod-neko -pneko-dev
+	dh_installdeb -plibapache2-mod-neko -pneko-dev
+	dh_gencontrol -plibapache2-mod-neko -pneko-dev
+	dh_md5sums -plibapache2-mod-neko -pneko-dev
+	dh_builddeb -plibapache2-mod-neko -pneko-dev
 
 binary-arch: build-stamp
 	dh_testdir
