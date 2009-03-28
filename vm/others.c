@@ -25,7 +25,7 @@
 DEFINE_KIND(k_int32);
 DEFINE_KIND(k_hash);
 
-extern _clock *neko_fields_lock;
+extern mt_lock *neko_fields_lock;
 extern objtable *neko_fields;
 extern field id_compare;
 extern field id_string;
@@ -70,6 +70,8 @@ EXTERN int val_compare( value a, value b ) {
 		return scmp(val_bool(a)?"true":"false",val_bool(a)?4:5,val_string(b),val_strlen(b));
 	case C(VAL_STRING,VAL_STRING):
 		return scmp(val_string(a),val_strlen(a),val_string(b),val_strlen(b));
+	case C(VAL_BOOL,VAL_BOOL):
+		return (a == b) ? 0 : (val_bool(a) ? 1 : -1);
 	case C(VAL_OBJECT,VAL_OBJECT):
 		if( a == b )
 			return 0;
@@ -352,7 +354,8 @@ int neko_stack_expand( int_val *sp, int_val *csp, neko_vm *vm ) {
 }
 
 EXTERN field val_id( const char *name ) {
-	value *fdata;
+	objtable t;
+	value fdata;
 	field f;
 	value acc = alloc_int(0);
 	const char *oname = name;
@@ -361,35 +364,75 @@ EXTERN field val_id( const char *name ) {
 		name++;
 	}
 	f = val_int(acc);
-	context_lock(neko_fields_lock);
-	fdata = otable_find(*neko_fields,f);
-	if( fdata != NULL ) {
-		if( scmp(val_string(*fdata),val_strlen(*fdata),oname,(int)(name - oname)) != 0 ) {
-			buffer b = alloc_buffer("Field conflict between ");
-			val_buffer(b,*fdata);
-			buffer_append(b," and ");
-			buffer_append(b,oname);
-			context_release(neko_fields_lock);
-			bfailure(b);
+	t = neko_fields[f&NEKO_FIELDS_MASK];
+	fdata = otable_get(t,f);
+	if( fdata == val_null ) {
+		// insert in the table, but by using a larger table that grows faster
+		// since we don't want to resize the table for each insert
+		int min;
+		int max;
+		int mid;
+		field cid;
+		cell *c;
+		lock_acquire(neko_fields_lock);
+		min = 0;
+		max = t->count;
+		c = t->cells;
+		while( min < max ) {
+			mid = (min + max) >> 1;
+			cid = c[mid].id;
+			if( cid < f )
+				min = mid + 1;
+			else if( cid > f )
+				max = mid;
+			else {
+				fdata = c[mid].v;
+				break;
+			}
 		}
-	} else
-		otable_replace(*neko_fields,f,copy_string(oname,name - oname));
-	context_release(neko_fields_lock);
+		// in case we found it, it means that it's been inserted by another thread
+		if( fdata == val_null ) {
+			cell *c2 = (cell*)alloc(sizeof(cell)*(t->count+1));
+
+			// copy the whole table
+			mid = (min + max) >> 1;
+			min = 0;
+			while( min < mid ) {
+				c2[min] = c[min];
+				min++;
+			}
+			c2[min].id = f;
+			c2[min].v = copy_string(oname,name - oname);
+			max = t->count;
+			while( min < max ) {
+				c2[min+1] = c[min];
+				min++;
+			}
+
+			// update
+			t->cells = c2;
+			t->count++;
+		}
+		lock_release(neko_fields_lock);
+	}
+	if( fdata != val_null && scmp(val_string(fdata),val_strlen(fdata),oname,(int)(name - oname)) != 0 ) {
+		buffer b = alloc_buffer("Field conflict between ");
+		val_buffer(b,fdata);
+		buffer_append(b," and ");
+		buffer_append(b,oname);
+		bfailure(b);
+	}
 	return f;
 }
 
 EXTERN value val_field_name( field id ) {
-	value *fdata;
-	context_lock(neko_fields_lock);
-	fdata = otable_find(*neko_fields,id);
-	context_release(neko_fields_lock);
-	if( fdata == NULL )
-		return val_null;
-	return *fdata;
+	return otable_get(neko_fields[id&NEKO_FIELDS_MASK],id);
 }
 
 EXTERN value val_field( value _o, field id ) {
 	value *f;
+	// WARNING : we can't change the value on the stack
+	// since it will be reused by the JIT (when compiled with GCC)
 	vobject *o = (vobject*)_o;
 	do {
 		f = otable_find(o->table,id);

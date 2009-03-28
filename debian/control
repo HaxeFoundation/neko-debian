@@ -2,37 +2,65 @@ Source: neko
 Section: interpreters
 Priority: optional
 Maintainer: Jens Peter Secher <jps@debian.org>
-Standards-Version: 3.7.3
-Build-Depends: debhelper (>= 5), dpatch, pkg-config, libgc-dev, apache2-dev, libmysqlclient15-dev, libsqlite3-dev, libpcre3-dev, libapr1-dev, libgtk2.0-dev
-Build-Conflicts: neko
+Standards-Version: 3.8.1
+Build-Depends: debhelper (>= 6), quilt, pkg-config, libgc-dev, apache2-threaded-dev, libmysqlclient15-dev, libsqlite3-dev, libpcre3-dev, libapr1-dev, libgtk2.0-dev
+Vcs-Hg: http://hg.debian.org/hg/collab-maint/neko/neko
 Homepage: http://nekovm.org
+
+Package: libneko0
+Architecture: any
+Section: libs
+Depends: ${shlibs:Depends}
+Conflicts: neko (<< 1.8.0-2)
+Description: Lightweight virtual machine - shared library
+ Neko provides a common runtime for several different languages,
+ including JavaScript and haXe.
+ .
+ This is the shared library implementing the Neko virtual machine.
+ .
+ Neko was written by Nicolas Cannasse.
+
+Package: neko-dev
+Architecture: all
+Section: libdevel
+Depends: libneko0 (>= ${source:Version})
+Conflicts: neko (<< 1.8.0-2)
+Description: Lightweight virtual machine - development
+ Neko provides a common runtime for several different languages,
+ including JavaScript and haXe.
+ .
+ The virtual machine is both very lightweight and well optimized.  It
+ can be easily embedded into other applications, and libraries are
+ directly accessible using the C foreign function interface.
+ .
+ This package includes the header files for development using the Neko
+ virtual machine.
+ .
+ Neko was written by Nicolas Cannasse.
 
 Package: neko
 Architecture: any
 Depends: ${shlibs:Depends}
-Description: High-level dynamically typed programming language
- Neko has been designed to provide a common runtime for several
- different languages, including JavaScript and haXe.
+Suggests: libapache2-mod-neko, neko-dev
+Description: Lightweight virtual machine - compiler and tools
+ Neko provides a common runtime for several different languages,
+ including JavaScript and haXe.
  .
  The compiler converts a source file (.neko) into a bytecode file (.n)
- that can be executed with the Virtual Machine. You can use the
- compiler as standalone commandline executable separated from the VM,
- or as a Neko library to perform compile-and-run for interactive
- languages.
+ that can be executed with the Virtual Machine.  You can use the
+ compiler as standalone commandline executable separated from the
+ virtual machine, or as a Neko library to perform compile-and-run for
+ interactive languages.
  . 
- The virtual machine is both very lightweight and well optimized. It
- can be easily embedded into other applications, and libraries are
- directly accessible using the C foreign function interface.
- .
  Neko was written by Nicolas Cannasse.
 
 Package: libapache2-mod-neko
 Section: web
 Architecture: all
 Depends: neko (>= ${source:Version}), apache2-mpm-prefork
-Description: Apache module for running server-side neko programs
- Neko has been designed to provide a common runtime for several
- different languages, including JavaScript and haXe.
+Description: Apache module for running server-side Neko programs
+ Neko provides a common runtime for several different languages,
+ including JavaScript and haXe.
  .
  This package includes a module for Apache 2 so that you can
  dynamically generate server-side web pages from Apache.

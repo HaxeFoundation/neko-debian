@@ -31,15 +31,14 @@
 #	include <signal.h>
 #endif
 
-#ifdef NEKO_INSTALLER
-extern void neko_installer_init();
-extern void neko_installer_error( const char *error );
-extern value neko_installer_loader( char *argv[], int argc );
-#	define default_loader neko_installer_loader
+#ifdef NEKO_STANDALONE
+	extern void neko_standalone_init();
+	extern void neko_standalone_error( const char *str );
+	extern value neko_standalone_loader( char **arv, int argc );
+#	define default_loader neko_standalone_loader
 #else
 #	define default_loader neko_default_loader
 #endif
-
 static FILE *self;
 
 extern void neko_stats_measure( neko_vm *vm, const char *kind, int start );
@@ -72,7 +71,7 @@ static char *executable_path() {
 #endif
 }
 
-int neko_has_embedded_module() {
+int neko_has_embedded_module( neko_vm *vm ) {
 	char *exe = executable_path();
 	unsigned char id[8];
 	int pos;
@@ -87,8 +86,11 @@ int neko_has_embedded_module() {
 		fclose(self);
 		return 0;
 	}
-	pos = id[4] | id[5] << 8 | id[6] << 16 | id[7] << 24;
+	pos = id[4] | id[5] << 8 | id[6] << 16;
 	fseek(self,pos,SEEK_SET);
+	// flags
+	if( (id[7] & 1) == 0 )
+		neko_vm_jit(vm,1);
 	return 1;
 }
 
@@ -115,8 +117,8 @@ static void report( neko_vm *vm, value exc, int isexc ) {
 	if( isexc )
 		buffer_append(b,"Uncaught exception - ");
 	val_buffer(b,exc);
-#	ifdef NEKO_INSTALLER
-	neko_installer_error(val_string(buffer_to_string(b)));
+#	ifdef NEKO_STANDALONE
+	neko_standalone_error(val_string(buffer_to_string(b)));
 #	else
 	fprintf(stderr,"%s\n",val_string(buffer_to_string(b)));
 #	endif
@@ -196,21 +198,13 @@ int main( int argc, char *argv[] ) {
 	value mload;
 	int r;
 	_CrtSetDbgFlag ( _CRTDBG_ALLOC_MEM_DF | _CRTDBG_DELAY_FREE_MEM_DF | _CRTDBG_LEAK_CHECK_DF );
-	neko_global_init(&vm);
+	neko_global_init();
 	vm = neko_vm_alloc(NULL);
 	neko_vm_select(vm);
-#	ifdef NEKO_POSIX
-	struct sigaction act;
-	act.sa_sigaction = NULL;
-	act.sa_handler = handle_signal;
-	act.sa_flags = 0;
-	sigemptyset(&act.sa_mask);
-	sigaction(SIGSEGV,&act,NULL);
+#	ifdef NEKO_STANDALONE
+	neko_standalone_init();
 #	endif
-#	ifdef NEKO_INSTALLER
-	neko_installer_init();
-#	endif
-	if( !neko_has_embedded_module() ) {
+	if( !neko_has_embedded_module(vm) ) {
 		int jit = 1;
 		int stats = 0;
 		while( argc > 1 ) {
@@ -230,12 +224,22 @@ int main( int argc, char *argv[] ) {
 			}
 			break;
 		}
+#		ifdef NEKO_POSIX
+		if( jit ) {
+			struct sigaction act;
+			act.sa_sigaction = NULL;
+			act.sa_handler = handle_signal;
+			act.sa_flags = 0;
+			sigemptyset(&act.sa_mask);
+			sigaction(SIGSEGV,&act,NULL);
+		}
+#		endif
 		neko_vm_jit(vm,jit);
 		if( argc == 1 ) {
-#			ifdef NEKO_INSTALLER
+#			ifdef NEKO_STANDALONE
 			report(vm,alloc_string("No embedded module in this executable"),0);
 #			else
-			printf("NekoVM %d.%d.%d (c)2005-2007 Motion-Twin\n  Usage : neko <file>\n",NEKO_VERSION/100,(NEKO_VERSION/10)%10,NEKO_VERSION%10);
+			printf("NekoVM %d.%d.%d (c)2005-2008 Motion-Twin\n  Usage : neko <file>\n",NEKO_VERSION/100,(NEKO_VERSION/10)%10,NEKO_VERSION%10);
 #			endif
 			mload = NULL;
 			r = 1;
@@ -271,6 +275,7 @@ int main( int argc, char *argv[] ) {
 	if( mload != NULL && val_field(mload,val_id("dump_prof")) != val_null )
 		val_ocall0(mload,val_id("dump_prof"));
 	vm = NULL;
+	mload = NULL;
 	neko_vm_select(NULL);
 	neko_global_free();
 	return r;

@@ -15,9 +15,14 @@
 /*																			*/
 /* ************************************************************************ */
 #include <neko.h>
+#include <string.h>
 #include "mod_neko.h"
 
 DEFINE_KIND(k_mod_neko);
+
+#ifndef NEKO_WINDOWS
+#	define strcmpi	strcasecmp
+#endif
 
 #ifdef APACHE_2_X
 #	define ap_table_get		apr_table_get
@@ -110,8 +115,7 @@ static value set_cookie( value name, value v ) {
 **/
 static value get_host_name() {
 	mcontext *c = CONTEXT();
-	const char *h = c->r->connection->local_host;
-	return alloc_string( h?h:c->r->connection->local_ip );
+	return alloc_string( c->r->hostname );
 }
 
 /**
@@ -167,7 +171,7 @@ static value set_header( value s, value k ) {
 	val_check(s,string);
 	val_check(k,string);
 	HEADERS_NOT_SENT("Header");
-	if( strcmp(val_string(s),"Content-Type") == 0 ) {
+	if( strcmpi(val_string(s),"Content-Type") == 0 ) {
 		c->content_type = alloc_string(val_string(k));
 		c->r->content_type = val_string(c->content_type);
 	} else
@@ -471,10 +475,14 @@ static value cgi_get_cwd() {
 }
 
 /**
-	cgi_set_main : function:0 -> void
-	<doc>Set the main entry point function</doc>
+	cgi_set_main : ?function:0 -> void
+	<doc>Set or disable the main entry point function</doc>
 **/
 static value cgi_set_main( value f ) {
+	if( val_is_null(f) ) {
+		CONTEXT()->main = NULL;
+		return val_true;
+	}
 	val_check_function(f,0);
 	CONTEXT()->main = f;
 	return val_true;
@@ -488,12 +496,6 @@ static value cgi_flush() {
 	ap_rflush(CONTEXT()->r);
 	return val_null;
 }
-
-/**
-	cgi_get_cache : void -> #list
-	<doc>Return the list of modules cached by mod_neko</doc>
-**/
-extern value cgi_get_cache();
 
 /**
 	cgi_get_config : void -> object
@@ -546,6 +548,29 @@ static value cgi_set_config( value v ) {
 **/
 extern value cgi_command( value v );
 
+/**
+	get_http_method : void -> string
+	<doc>Returns the http method (GET,POST...) used by the client</doc>
+**/
+static value get_http_method() {
+	return alloc_string(CONTEXT()->r->method);
+}
+
+/**
+	log_message : string -> void
+	<doc>Write the message into the apache log</doc>
+**/
+static value log_message( value message ) {
+	mcontext *c = CONTEXT();
+	val_check(message, string);
+#ifdef APACHE_2_X
+	ap_log_rerror(__FILE__, __LINE__, APLOG_NOTICE, APR_SUCCESS, c->r, "[mod_neko] %s", val_string(message));
+#else
+	ap_log_rerror(__FILE__, __LINE__, APLOG_NOTICE, c->r, "[mod_neko] %s", val_string(message));
+#endif
+	return val_null;
+}
+
 DEFINE_PRIM(cgi_get_cwd,0);
 DEFINE_PRIM(cgi_set_main,1);
 DEFINE_PRIM(get_cookies,0);
@@ -566,5 +591,7 @@ DEFINE_PRIM(cgi_flush,0);
 DEFINE_PRIM(cgi_get_config,0);
 DEFINE_PRIM(cgi_set_config,1);
 DEFINE_PRIM(cgi_command,1);
+DEFINE_PRIM(get_http_method,0);
+DEFINE_PRIM(log_message,1);
 
 /* ************************************************************************ */

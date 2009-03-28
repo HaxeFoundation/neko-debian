@@ -167,13 +167,47 @@ static value print_redirect( value f ) {
 	neko_vm *vm = neko_vm_current();
 	if( val_is_null(f) ) {
 		neko_vm_redirect(vm,NULL,NULL);
-		return val_true;
+		return val_null;
 	}
 	val_check_function(f,1);
 	neko_vm_redirect(vm,print_callback,f);
-	return val_true;
+	return val_null;
 }
 
+/**
+	set_trusted : bool -> void
+	<doc>
+	Change the trusted mode of the VM.
+	This can optimize some operations such as module loading by turning off some checks.
+	</doc>
+**/
+static value set_trusted( value b ) {
+	val_check(b,bool);
+	neko_vm_trusted(neko_vm_current(),val_bool(b));
+	return val_null;
+}
+
+/**
+	same_closure : f1 -> f2 -> bool
+	<doc>
+	Compare two functions by checking that they refer to the same implementation and that their environments contains physically equal values.
+	</doc>
+**/
+static value same_closure( value _f1, value _f2 ) {
+	vfunction *f1 = (vfunction*)_f1;
+	vfunction *f2 = (vfunction*)_f2;
+	int i;
+	if( !val_is_function(f1) || !val_is_function(f2) )
+		return val_false;
+	if( f1 == f2 )
+		return val_true;
+	if( f1->nargs != f2->nargs || f1->addr != f2->addr || f1->module != f2->module || val_array_size(f1->env) != val_array_size(f2->env) )
+		return val_false;
+	for(i=0;i<val_array_size(f1->env);i++)
+		if( val_array_ptr(f1->env)[i] != val_array_ptr(f2->env)[i] )
+			return val_false;
+	return val_true;
+}
 
 DEFINE_PRIM(float_bytes,2);
 DEFINE_PRIM(double_bytes,2);
@@ -184,5 +218,7 @@ DEFINE_PRIM(gc_stats,0);
 DEFINE_PRIM(enable_jit,1);
 DEFINE_PRIM(test,0);
 DEFINE_PRIM(print_redirect,1);
+DEFINE_PRIM(set_trusted,1);
+DEFINE_PRIM(same_closure,2);
 
 /* ************************************************************************ */

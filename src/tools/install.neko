@@ -40,21 +40,23 @@ buffer_string = $loader.loadprim("std@buffer_string",1);
 
 libs = {
 	mod_neko => {
-		src => $array("mod_neko","cgi","../../vm/context","../../vm/stats"),
+		src => $array("mod_neko","cgi","../../vm/stats"),
 		inc => "httpd.h",
 		incname => "Apache 1.3.x"
 	},
 	mod_neko2 => {
-		src => $array("mod_neko","cgi","../../vm/context","../../vm/stats"),
+		src => $array("mod_neko","cgi","../../vm/stats"),
 		inc => $array("httpd.h","apr.h"),
 		incname => "Apache 2.2.x",
 		cflags => "-D_LARGEFILE64_SOURCE",
+		realdir => "mod_neko",
+		apache2 => true,
 	},
 	mysql => {
 		src => $array("mysql"),
 		inc => "mysql.h",
 		incname => "MySQL 4.+"
-		lib => "libmysqlclient.a",
+		lib => "libmysqlclient_r.a",
 		lparams => "-lz -lssl"
 	},
 	regexp => {
@@ -81,16 +83,33 @@ libs = {
 		incname => switch system { "Mac" => "Carbon" default => "GTK+2.0" },
 		cflags => switch system { "Mac" => "" default => "`pkg-config --cflags gtk+-2.0`" },
 		lparams => switch system { "Mac" => "-framework Carbon" default => "`pkg-config --libs gtk+-2.0` -lgthread-2.0" },
-	}
+	},
+	mod_tora => {
+		src => $array("mod_tora","protocol"),
+		inc => "httpd.h",
+		incname => "Apache 1.3.x"
+	},
+	mod_tora2 => {
+		src => $array("mod_tora","protocol"),
+		inc => $array("httpd.h","apr.h"),
+		incname => "Apache 2.2.x",
+		cflags => "-D_LARGEFILE64_SOURCE",
+		realdir => "mod_tora",
+		apache2 => true,
+	},
 }
 
 // PLATFORM
 
-cflags = "-O3 -fPIC";
+cflags = "-O3 -fPIC -pthread";
 cc = getenv("CC");
 if( cc == null ) cc = "gcc";
 linkcmd = switch system { "BSD" => "ld" default => cc };
-linkoptions = switch system { "Mac" => "-bundle -undefined dynamic_lookup -L../../bin -lneko" default => "-shared -L../../bin -lneko" };
+linkneko = "-lneko";
+linkoptions = switch system {
+	"Mac" => "-bundle -undefined dynamic_lookup -L../../bin -pthread"
+	default => "-shared -L../../bin -pthread"
+};
 nekovm = switch system { "Windows" => "..\\bin\\neko" default => "../bin/neko" };
 
 if( osx_universal ) {
@@ -110,35 +129,48 @@ includes = $array(
 	"../../vm",
 );
 
-search_includes = function(ism2) {
-	return $array(
+search_includes = function(isap2) {
+	var inc1 = $array(
 		"/usr/include",
-		if( ism2 ) "/usr/local/apache2/include" else "/usr/local/apache/include",
-		if( ism2 ) "/usr/include/apache2" else "/usr/apache/include",
-		if( ism2 ) "/opt/local/apache2/include" else "/opt/local/include/apache",
-		if( ism2 ) "" else "/usr/include/apache-1.3",
 		"/usr/local/include/mysql",
 		"/usr/include/mysql",
 		"/usr/local/include",
-		"/usr/include/apr-1",
-		"/usr/include/apr-1.0",
-		"/usr/include/apr-0",
 		"/usr/include/gtk-2.0",
-		"/usr/local/include/apr-1",
-		"/usr/local/include/apr-1.0",
-		"/usr/local/include/apr-0",
 		"/opt/local/include",
-		"/opt/local/include/apr-1",
-		"/opt/local/include/apr-1.0",
-		"/opt/local/include/apr-0",
 		"/opt/local/include/mysql",
 		"/Developer/Headers/FlatCarbon",
 	);
+	var inc2;
+	if( isap2 )
+		inc2 = $array(
+			"/usr/local/apache2/include",
+			"/usr/include/apache2",
+			"/opt/local/apache2/include",
+			"/usr/include/apr-1",
+			"/usr/include/apr-1.0",
+			"/usr/include/apr-0",
+			"/usr/local/include/apr-1",
+			"/usr/local/include/apr-1.0",
+			"/usr/local/include/apr-0",
+			"/opt/local/include/apr-1",
+			"/opt/local/include/apr-1.0",
+			"/opt/local/include/apr-0"
+		);
+	else
+		inc2 = $array(
+			"/usr/apache/include",
+			"/usr/include/apache-1.3",
+			"/usr/include/httpd",
+			"/opt/local/include/apache",
+			"/usr/local/apache/include"
+		);
+	return $aconcat($array(inc1,inc2));
 }
 
 libraries = $array(
 	"../../libs/include",
 	"/usr/lib",
+	"/usr/lib/mysql",
 	"/usr/local/lib",
 	"/usr/local/lib/mysql",
 	"/opt/local/lib",
@@ -250,7 +282,10 @@ nekoboot = function(file) {
 
 link = function(files,target,params1,params2) {
 	files = make("",map(files,function(f){ f + ".o" }));
-	var cmd = linkcmd+" "+linkoptions+" "+make("-L",libraries);
+	var opt = linkoptions;
+	if( target != "mod_tora" && target != "mod_tora2" )
+		opt += " "+linkneko;
+	var cmd = linkcmd+" "+opt+" "+make("-L",libraries);
 	var out = " -o ../../bin/"+target+".ndll ";
 	exec(cmd+out+params1+files+params2);
 }
@@ -271,13 +306,9 @@ loop_include = function(data,i,incl) {
 }
 
 
-compile_lib = function(lib) {
-	$print("Compiling ",lib,"...\n");
-	var data = $objget(libs,$hash(lib));
-	if( data == null )
-		return $print("No data found for this library : Skipping\n");
-	var ism2 = lib == "mod_neko2";
-	var incl = search_includes(ism2);
+compile_lib = function(name,data) {
+	$print("Compiling ",name,"...\n");
+	var incl = search_includes(data.apache2);
 	var dirs = $array();
 	if( $typeof(data.inc) == $tstring )
 		data.inc = $array(data.inc);
@@ -304,11 +335,16 @@ compile_lib = function(lib) {
 		linklib = dir + "/" + linklib;
 	}
 	var i = 0;
+	var dir = data.realdir;
+	if( dir == null ) dir = name;
+	chdir(dir);
 	while( i < $asize(data.src) ) {
 		compile(data.src[i],if( data.cflags != null ) data.cflags else "", dirs);
 		i = i + 1;
 	}
-	link(data.src,lib,if( data.lparams != null ) { data.lparams+" " } else ""," "+linklib);
+	link(data.src,name,if( data.lparams != null ) { data.lparams+" " } else ""," "+linklib);
+	chdir("..");
+	data.built = true;
 }
 
 // MAIN LOOP
@@ -327,7 +363,7 @@ exec(nekovm+" nekoc tools/test.neko");
 copy("tools/test.n",base);
 
 exec(nekovm+" nekoc tools/nekoboot.neko");
-exec(nekovm+" nekoml -p tools Tools.nml");
+exec(nekovm+" nekoml -nostd -p tools Tools.nml");
 exec(nekovm+" nekoc -link tools/nekotools.n Tools");
 copy("tools/nekotools.n",base);
 
@@ -338,19 +374,19 @@ nekoboot(base+"/nekotools.n");
 // compile libs
 
 chdir("../libs");
-var libs = readdir(".");
-while( libs != null ) {
-	var l = libs[0];
-	if( l == "include" || l == "std" || l == "CVS" || ftype(l) != "dir" )
-		$goto(next);
-	chdir(l);
-	compile_lib(l);
-	if( l == "mod_neko" )
-		compile_lib("mod_neko2");
-	chdir("..");
-next:
-	libs = libs[1];
+var liblist = $objfields(libs);
+var i = 0;
+while( i < $asize(liblist) ) {
+	var l = liblist[i];
+	compile_lib($field(l),$objget(libs,l));
+	i += 1;
 }
+
+// rebuild nekoml.std (needs zlib)
+
+chdir("../src");
+if( libs.zlib.built )
+	exec(nekovm+" nekoml -nostd neko/Main.nml nekoml/Main.nml core/*.nml -pack ../bin/nekoml.std");
 
 // END
 $print("Install done, all files are available in /bin directory\n");

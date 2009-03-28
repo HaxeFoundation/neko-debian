@@ -1,0 +1,3 @@
+soname-strip.diff
+include-and-link.diff
+tora-pwrite-diversion.diff
