@@ -12,7 +12,7 @@
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  *  Lesser General Public License or the LICENSE file for more details.
  */
-
+open Lexer;
 open Neko.Ast;
 open Neko.Bytecode;
 
@@ -34,11 +34,20 @@ type label {
 	mutable lwait : (void -> void) list;
 }
 
-type context {
-	mutable ops : opcode array;
-	mutable locals : (string,int) Map.t;
+type globals {
 	globals : (global,int) Hashtbl.t;
 	gobjects : (string list,int) Hashtbl.t;
+	mutable functions : (opcode array, (int,int) array, int , int) list;
+	mutable gtable : global array;
+	labels : (string,label) Hashtbl.t;
+	hfiles : (string,int) Hashtbl.t;
+	files : string array;
+}
+
+type context {
+	g : globals;
+	mutable ops : opcode array;
+	mutable locals : (string,int) Map.t;
 	mutable env : (string,int) Map.t;
 	mutable nenv : int;
 	mutable stack : int;
@@ -47,11 +56,9 @@ type context {
 	mutable traps : int list;
 	mutable breaks : (void -> void, pos) list;
 	mutable continues : (void -> void, pos) list;
-	mutable functions : (opcode array, (string,int) array, int , int) list;
-	mutable gtable : global array;
-	labels : (string,label) Hashtbl.t;
-	mutable pos : (string,int) array;
-	mutable curpos : (string,int);
+	mutable pos : (int,int) array;
+	mutable curpos : (int, int);
+	mutable curfile : string;
 }
 
 type error_msg = string
@@ -141,7 +148,22 @@ function pos(ctx) {
 }
 
 function set_pos(ctx,p) {
-	if p != Lexer.null_pos then ctx.curpos := (Lexer.source p,Lexer.line p);
+	if p.psource == ctx.curfile then {
+		if p.pline != snd ctx.curpos then ctx.curpos := (fst ctx.curpos, p.pline);
+	} else if p == Lexer.null_pos then {
+		// nothing
+	} else {
+		var fid = try 
+			Hashtbl.find ctx.g.hfiles p.psource 
+		catch { Not_found -> 
+			var fid = Array.length ctx.g.files;
+			Array.add ctx.g.files p.psource;
+			Hashtbl.add ctx.g.hfiles p.psource fid;
+			fid;
+		}
+		ctx.curfile := p.psource;
+		ctx.curpos := (fid,p.pline);
+	}
 }
 
 function write(ctx,op) {
@@ -180,13 +202,14 @@ function goto(ctx,p) {
 }
 
 function global(ctx,g) {
+	var ginf = ctx.g;
 	try
-		Hashtbl.find ctx.globals g
+		Hashtbl.find ginf.globals g
 	catch {
 		Not_found ->
-			var gid = Array.length ctx.gtable;
-			Hashtbl.add ctx.globals g gid;
-			Array.add ctx.gtable g;
+			var gid = Array.length ginf.gtable;
+			Hashtbl.add ginf.globals g gid;
+			Array.add ginf.gtable g;
 			gid
 	}
 }
@@ -231,36 +254,39 @@ function get_cases_ints(cases) {
 		| _ -> throw Exit
 		}
 	}) cases;
-	// only create jump table if small or >50% cases matched
-	if *max >= 16 && (List.length l * 100) / (*max + 1) < 50 then throw Exit;
+	// only create jump table if small or >10% cases matched
+	var nmatches = List.length l;
+	if nmatches < 3 then throw Exit;
+	if *max >= 16 && (nmatches * 100) / (*max + 1) < 10 then throw Exit;
 	(l,*max + 1)
 }
 
-function rec scan_labels(ctx,supported,e) {
+function rec scan_labels(ctx,supported,in_block,e) {
 	match fst e {
 	| EFunction (args,e) ->
 		var nargs = List.length args;
 		var traps = ctx.traps;
 		ctx.traps := [];
 		ctx.stack := ctx.stack + nargs;
-		scan_labels ctx supported e;
+		scan_labels ctx supported false e;
 		ctx.stack := ctx.stack - nargs;
 		ctx.traps := traps
 	| EBlock _ ->
 		var old = ctx.stack;
-		Neko.Ast.iter (scan_labels ctx supported) e;
+		Neko.Ast.iter (scan_labels ctx supported true) e;
 		ctx.stack := old
 	| EVars l ->
+		if !in_block then error "Variable declaration must be done inside a block" (snd e);
 		List.iter (function((_,e)) {
 			match e {
 			| None -> ()
-			| Some e -> scan_labels ctx supported e
+			| Some e -> scan_labels ctx supported false e
 			};
 			ctx.stack := ctx.stack + 1
 		}) l
 	| ELabel l when !supported ->
 		error "Label is not supported in this part of the program" (snd e);
-	| ELabel l when Hashtbl.exists ctx.labels l ->
+	| ELabel l when Hashtbl.exists ctx.g.labels l ->
 		error ("Duplicate label " + l) (snd e)
 	| ELabel l ->
 		var label = {
@@ -270,15 +296,15 @@ function rec scan_labels(ctx,supported,e) {
 			lpos = None;
 			lwait = [];
 		};
-		Hashtbl.add ctx.labels l label
+		Hashtbl.add ctx.g.labels l label
 	| ETry (e,_,e2) ->
 		ctx.stack := ctx.stack + trap_stack_delta;
 		ctx.traps := ctx.stack :: ctx.traps;
-		scan_labels ctx supported e;
+		scan_labels ctx supported false e;
 		ctx.stack := ctx.stack - trap_stack_delta;
 		ctx.traps := match ctx.traps { [] -> assert() | _ :: l -> l };
 		ctx.stack := ctx.stack + 1;
-		scan_labels ctx supported e2;
+		scan_labels ctx supported false e2;
 		ctx.stack := ctx.stack - 1;
 	| EBinop ("=",e1,e2) ->
 		function rec is_extended((e,_)) {
@@ -293,59 +319,61 @@ function rec scan_labels(ctx,supported,e) {
 		};
 		var ext = is_extended e1;
 		if ext then ctx.stack := ctx.stack + 1;
-		scan_labels ctx supported e2;
+		scan_labels ctx supported false e2;
 		ctx.stack := ctx.stack + 1;
-		scan_labels ctx supported e1;
+		scan_labels ctx supported false e1;
 		ctx.stack := ctx.stack - (if ext then 2 else 1);
 	| ECall ((EConst (Builtin x),_),el) when x != "array" && x != "apply" ->
-		Neko.Ast.iter (scan_labels ctx false) e
+		Neko.Ast.iter (scan_labels ctx false false) e
 	| ECall ((EConst (Builtin "array"),_),e :: el)
 	| ECall ((EConst (Builtin "apply"),_),e :: el)
 	| ECall(e,el) ->
 		List.iter (function(e) {
-			scan_labels ctx supported e;
+			scan_labels ctx supported false e;
 			ctx.stack := ctx.stack + 1;
 		}) el;
-		scan_labels ctx supported e;
+		scan_labels ctx supported false e;
 		ctx.stack := ctx.stack - List.length el
 	| EObject fl ->
 		ctx.stack := ctx.stack + 2;
 		List.iter (function((s,e)) {
-			scan_labels ctx supported e
+			scan_labels ctx supported false e
 		}) fl;
 		ctx.stack := ctx.stack - 2;
 	| ESwitch (ee,[(econd,exec)],eo) ->
 		var p = snd e;
-		scan_labels ctx supported (EIf (EBinop "==" ee econd,p) exec eo,p)
+		scan_labels ctx supported false (EIf (EBinop "==" ee econd,p) exec eo,p)
 	| ESwitch (e,cases,eo) ->
-		scan_labels ctx supported e;
+		scan_labels ctx supported false e;
 		var delta = try { ignore(get_cases_ints cases); 0 } catch { Exit -> 1 };
 		ctx.stack := ctx.stack + delta;
 		List.iter (function((e1,e2)) {
 			ctx.stack := ctx.stack + delta;
-			scan_labels ctx supported e1;
+			scan_labels ctx supported false e1;
 			ctx.stack := ctx.stack - delta;
-			scan_labels ctx supported e2;
+			scan_labels ctx supported false e2;
 		}) cases;
 		match eo {
 		| None -> ()
-		| Some e -> scan_labels ctx supported e
+		| Some e -> scan_labels ctx supported false e
 		}
 		ctx.stack := ctx.stack - delta;
+	| ENext (e1,e2) ->
+		scan_labels ctx supported in_block e1;
+		scan_labels ctx supported in_block e2;
 	| EConst _
 	| EContinue
 	| EBreak _
 	| EReturn _
 	| EIf _
 	| EWhile _
-	| EParenthesis _
-	| ENext _ ->
-		Neko.Ast.iter (scan_labels ctx supported) e
+	| EParenthesis _ ->
+		Neko.Ast.iter (scan_labels ctx supported false) e
 	| EBinop (_,_,_)
 	| EArray _
 	| EField _
 		->
-		Neko.Ast.iter (scan_labels ctx false) e
+		Neko.Ast.iter (scan_labels ctx false false) e
 	}
 }
 
@@ -559,24 +587,25 @@ function rec compile_binop(ctx,tail,op,e1,e2,p) {
 	}
 }
 
-function rec compile_function(ctx,params,e) {
-	var limit = ctx.limit;
-	var ops = ctx.ops;
-	var breaks = ctx.breaks;
-	var continues = ctx.continues;
-	var locals = ctx.locals;
-	var env = ctx.env;
-	var nenv = ctx.nenv;
-	var traps = ctx.traps;
-	var pos = ctx.pos;
-	ctx.pos := Array.create();
-	ctx.ops := Array.create();
-	ctx.breaks := [];
-	ctx.continues := [];
-	ctx.env := Map.empty();
-	ctx.nenv := 0;
-	ctx.traps := [];
-	ctx.limit := ctx.stack;
+function rec compile_function(main,params,e) {
+	var ctx = {
+		g = main.g;
+		// reset
+		ops = Array.create();
+		pos = Array.create();
+		breaks = [];
+		continues = [];
+		env = Map.empty();
+		nenv = 0;
+		traps = [];
+		limit = main.stack;
+		// dup
+		stack = main.stack;
+		locals = main.locals;
+		loop_limit = main.loop_limit;
+		curpos = main.curpos;
+		curfile = main.curfile;
+	};
 	List.iter (function(v) {
 		ctx.stack := ctx.stack + 1;
 		ctx.locals := Map.add ctx.locals v ctx.stack;
@@ -586,32 +615,22 @@ function rec compile_function(ctx,params,e) {
 	write ctx (Ret (ctx.stack - ctx.limit));
 	check_stack ctx s (snd e);
 	check_breaks ctx;
-	ctx.stack := ctx.limit;
-	ctx.limit := limit;
-	ctx.breaks := breaks;
-	ctx.continues := continues;
-	ctx.locals := locals;
-	var gid = Array.length ctx.gtable;
-	ctx.functions := (ctx.ops,ctx.pos,gid,List.length params) :: ctx.functions;
-	Array.add ctx.gtable GlobalFunction(gid,-1);
-	ctx.ops := ops;
-	ctx.pos := pos;
-	var local_env = ctx.env;
-	var local_nenv = ctx.nenv;
-	ctx.env := env;
-	ctx.traps := traps;
-	ctx.nenv := nenv;
-	if local_nenv > 0 then {
-		var a = Array.make local_nenv "";
-		Map.iter (function(v,i){ a.[i] := v }) local_env;
+	// add function
+	var gid = Array.length ctx.g.gtable;
+	ctx.g.functions := (ctx.ops,ctx.pos,gid,List.length params) :: ctx.g.functions;
+	Array.add ctx.g.gtable GlobalFunction(gid,-1);
+	// environment
+	if ctx.nenv > 0 then {
+		var a = Array.make ctx.nenv "";
+		Map.iter (function(v,i){ a.[i] := v }) ctx.env;
 		Array.iter (function(v){
-			compile_constant ctx (Ident v) snd(e);
-			write ctx Push;
+			compile_constant main (Ident v) snd(e);
+			write main Push;
 		}) a;
-		write ctx (AccGlobal gid);
-		write ctx (MakeEnv local_nenv);
+		write main (AccGlobal gid);
+		write main (MakeEnv ctx.nenv);
 	} else
-		write ctx (AccGlobal gid);
+		write main (AccGlobal gid);
 }
 
 function rec compile_builtin(ctx,tail,b,el,p) {
@@ -642,7 +661,7 @@ function rec compile_builtin(ctx,tail,b,el,p) {
 		compile ctx false e2;
 		write ctx PhysCompare
 	| ("goto" , [(EConst (Ident l) , _)] ) ->
-		var l = try Hashtbl.find ctx.labels l catch { Not_found -> error ("Unknown label " + l) p };
+		var l = try Hashtbl.find ctx.g.labels l catch { Not_found -> error ("Unknown label " + l) p };
 		var os = ctx.stack;
 		function rec loop(l1,l2) {
 			match (l1,l2) {
@@ -909,10 +928,10 @@ function rec compile(ctx,tail,(e,p)) {
 	| EObject fl ->
 		var fields = List.sort compare (List.map fst fl);
 		var id = try
-			Hashtbl.find ctx.gobjects fields
+			Hashtbl.find ctx.g.gobjects fields
 		catch { Not_found ->
-			var id = global ctx (GlobalVar ("o:" + Hashtbl.length ctx.gobjects));
-			Hashtbl.add ctx.gobjects fields id;
+			var id = global ctx (GlobalVar ("o:" + Hashtbl.length ctx.g.gobjects));
+			Hashtbl.add ctx.g.gobjects fields id;
 			id
 		};
 		write ctx (AccGlobal id);
@@ -926,7 +945,7 @@ function rec compile(ctx,tail,(e,p)) {
 		}) fl;
 		write ctx (Pop 1)
 	| ELabel l ->
-		var l = try Hashtbl.find ctx.labels l catch { Not_found -> assert() };
+		var l = try Hashtbl.find ctx.g.labels l catch { Not_found -> assert() };
 		if ctx.stack != l.lstack || List.rev(ctx.traps) != l.ltraps then error (sprintf "Label failure %d %d %s %s" (ctx.stack,l.lstack,string List.rev(ctx.traps),string l.ltraps)) p;
 		List.iter (function(f) { f() }) l.lwait;
 		l.lwait := [];
@@ -991,29 +1010,35 @@ function rec compile(ctx,tail,(e,p)) {
 }
 
 function compile(ast) {
-	var ctx = {
-		stack = 0;
-		loop_limit = 0;
-		limit = -1;
+	var g = {
 		globals = Hashtbl.create();
 		gobjects = Hashtbl.create();
 		gtable = Array.create();
+		functions = [];
+		labels = Hashtbl.create();
+		hfiles = Hashtbl.create();
+		files = Array.create();
+	};
+	var ctx = {
+		g = g;
+		stack = 0;
+		loop_limit = 0;
+		limit = -1;
 		locals = Map.empty();
 		ops = Array.create();
 		breaks = [];
 		continues = [];
-		functions = [];
 		env = Map.empty();
 		nenv = 0;
 		traps = [];
-		labels = Hashtbl.create();
 		pos = Array.create();
-		curpos = ("",0);
+		curpos = (0,0);
+		curfile = "_";
 	};
-	scan_labels ctx true ast;
+	scan_labels ctx true true ast;
 	compile ctx false ast;
 	check_breaks ctx;
-	if ctx.functions != [] || Hashtbl.length ctx.gobjects != 0 then {
+	if g.functions != [] || Hashtbl.length g.gobjects != 0 then {
 		var ctxops = ctx.ops;
 		var ctxpos = ctx.pos;
 		var ops = Array.create();
@@ -1022,10 +1047,10 @@ function compile(ast) {
 		ctx.ops := ops;
 		write ctx (Jump 0);
 		List.iter (function((fops,fpos,gid,nargs)) {
-			Array.set ctx.gtable gid GlobalFunction(Array.length ops,nargs);
+			Array.set g.gtable gid GlobalFunction(Array.length ops,nargs);
 			Array.append fops ops;
 			Array.append fpos pos;
-		}) (List.rev ctx.functions);
+		}) (List.rev g.functions);
 		Array.set ops 0 (Jump (Array.length ops));
 		Hashtbl.iter (function(fl,g) {
 			write ctx AccNull;
@@ -1036,10 +1061,10 @@ function compile(ast) {
 				write ctx Push;
 				write ctx (SetField f);
 			}) fl
-		}) ctx.gobjects;
+		}) g.gobjects;
 		Array.append ctxpos pos;
 		Array.append ctxops ops;
 	};
-	Array.add ctx.gtable (GlobalDebug ctx.pos);
-	(ctx.gtable, ctx.ops)
+	Array.add g.gtable (GlobalDebug ctx.g.files ctx.pos);
+	(g.gtable, ctx.ops)
 }

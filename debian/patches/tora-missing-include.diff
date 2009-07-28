@@ -1,0 +1,16 @@
+## tora-missing-include.diff by Jens Peter Secher <jps@debian.org>
+##
+## Include missing declaration of free().
+
+Index: neko/libs/mod_tora/protocol.c
+===================================================================
+--- neko.orig/libs/mod_tora/protocol.c	2009-07-28 22:50:07.000000000 +0200
++++ neko/libs/mod_tora/protocol.c	2009-07-28 22:50:31.000000000 +0200
+@@ -17,6 +17,7 @@
+ #include <string.h>
+ #include "protocol.h"
+ #include "socket.h"
++#include "stdlib.h"
+ 
+ struct _protocol {
+ 	PSOCK s;

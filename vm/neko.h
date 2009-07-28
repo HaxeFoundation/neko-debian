@@ -81,7 +81,7 @@
 #	include <stdint.h>
 #endif
 
-#define NEKO_VERSION	180
+#define NEKO_VERSION	181
 
 typedef intptr_t int_val;
 
@@ -104,12 +104,22 @@ struct _value {
 	val_type t;
 };
 
-struct _objtable;
 struct _buffer;
 typedef int field;
 typedef struct { int __zero; } *vkind;
 typedef struct _value *value;
-typedef struct _objtable* objtable;
+
+typedef struct {
+	field id;
+	value v;
+} objcell;
+
+typedef struct _objtable
+{
+	int count;
+	objcell *cells;
+} objtable;
+
 typedef struct _buffer *buffer;
 typedef double tfloat;
 
@@ -412,7 +422,7 @@ C_FUNCTION_BEGIN
 	EXTERN mt_lock *alloc_lock();
 	EXTERN void lock_acquire( mt_lock *l );
 	EXTERN int lock_try( mt_lock *l );
-	EXTERN void lock_release( mt_lock *l );	
+	EXTERN void lock_release( mt_lock *l );
 	EXTERN void free_lock( mt_lock *l );
 
 C_FUNCTION_END

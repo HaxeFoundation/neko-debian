@@ -1,3 +1,16 @@
+neko (1.8.1-1) unstable; urgency=low
+
+  * New upstream version.
+  * Bump SONAME to libneko.0.1 and make libneko0 conflict with previous
+    version of neko-dev.
+  * Change libapache2-mod-neko package section to httpd, and updated
+    Standards-Version to 3.8.2.
+  * Removed obsolete patch tora-pwrite-diversion.diff.
+  * Added tora-missing-include.diff to include stdlib.h.
+  * Added mysql-missing-include.diff to include stdlib.h.
+    
+ -- Jens Peter Secher <jps@debian.org>  Tue, 28 Jul 2009 22:32:00 +0200
+
 neko (1.8.0-4) unstable; urgency=low
 
   * Fix broken NDLLs (shared libraries) by reverting some of the previous

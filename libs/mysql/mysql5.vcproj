@@ -12,14 +12,14 @@
 	<Configurations>
 		<Configuration
 			Name="Debug|Win32"
-			OutputDirectory="Debug"
-			IntermediateDirectory="Debug"
+			OutputDirectory="Debug5"
+			IntermediateDirectory="Debug5"
 			ConfigurationType="2"
 			CharacterSet="2">
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="..\..\vm;..\include\mysql5"
+				AdditionalIncludeDirectories="..\..\vm;my_proto;..\common"
 				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;_USRDLL;MYSQL_EXPORTS"
 				MinimalRebuild="TRUE"
 				BasicRuntimeChecks="3"
@@ -32,7 +32,7 @@
 				Name="VCCustomBuildTool"/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="..\include\mysql5\mysqlclient.lib ws2_32.lib ..\..\bin\neko.lib"
+				AdditionalDependencies="..\..\bin\neko.lib ws2_32.lib"
 				OutputFile="../../bin/mysql5.ndll"
 				LinkIncremental="2"
 				IgnoreDefaultLibraryNames="LIBCMT"
@@ -64,15 +64,15 @@
 		</Configuration>
 		<Configuration
 			Name="Release|Win32"
-			OutputDirectory="Release"
-			IntermediateDirectory="Release"
+			OutputDirectory="Release5"
+			IntermediateDirectory="Release5"
 			ConfigurationType="2"
 			CharacterSet="2">
 			<Tool
 				Name="VCCLCompilerTool"
-				AdditionalIncludeDirectories="..\..\vm;..\include\mysql5"
+				AdditionalIncludeDirectories="..\..\vm;my_proto;..\common"
 				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;_USRDLL;MYSQL_EXPORTS"
-				RuntimeLibrary="0"
+				RuntimeLibrary="2"
 				BufferSecurityCheck="FALSE"
 				UsePrecompiledHeader="0"
 				WarningLevel="3"
@@ -82,11 +82,10 @@
 				Name="VCCustomBuildTool"/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="..\include\mysql5\mysqlclient.lib ..\..\bin\neko.lib ws2_32.lib"
+				AdditionalDependencies="..\..\bin\neko.lib msvcrt60.lib ws2_32.lib"
 				OutputFile="../../bin/mysql5.ndll"
 				LinkIncremental="1"
-				IgnoreDefaultLibraryNames=""
-				GenerateDebugInformation="TRUE"
+				IgnoreDefaultLibraryNames="MSVCRT"
 				SubSystem="2"
 				OptimizeReferences="2"
 				EnableCOMDATFolding="2"
@@ -117,6 +116,37 @@
 	<References>
 	</References>
 	<Files>
+		<Filter
+			Name="my_proto"
+			Filter="">
+			<File
+				RelativePath=".\my_proto\my_api.c">
+			</File>
+			<File
+				RelativePath=".\my_proto\my_proto.c">
+			</File>
+			<File
+				RelativePath=".\my_proto\my_proto.h">
+			</File>
+			<File
+				RelativePath=".\my_proto\mysql.h">
+			</File>
+			<File
+				RelativePath="..\common\os.h">
+			</File>
+			<File
+				RelativePath="..\common\sha1.c">
+			</File>
+			<File
+				RelativePath="..\common\sha1.h">
+			</File>
+			<File
+				RelativePath="..\common\socket.c">
+			</File>
+			<File
+				RelativePath="..\common\socket.h">
+			</File>
+		</Filter>
 		<File
 			RelativePath=".\mysql.c">
 		</File>

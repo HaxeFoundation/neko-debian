@@ -1,3 +1,4 @@
 soname-strip.diff
 include-and-link.diff
-tora-pwrite-diversion.diff
+tora-missing-include.diff
+mysql-missing-include.diff

@@ -1,23 +1,23 @@
-## include-and-link.dpatch by Jens Peter Secher <jps@debian.org>
+## include-and-link.diff by Jens Peter Secher <jps@debian.org>
 ##
 ## Use the right include directories, shared libraries and cflags.
 ## Use -rpath to force search in /usr/lib/neko.
 
 Index: neko/src/tools/install.neko
 ===================================================================
---- neko.orig/src/tools/install.neko	2009-03-28 09:38:21.000000000 +0100
-+++ neko/src/tools/install.neko	2009-03-28 09:39:12.000000000 +0100
+--- neko.orig/src/tools/install.neko	2009-07-28 22:03:49.000000000 +0200
++++ neko/src/tools/install.neko	2009-07-28 22:19:00.000000000 +0200
 @@ -39,11 +39,6 @@
  // LIBS DATAS
  
  libs = {
 -	mod_neko => {
--		src => $array("mod_neko","cgi","../../vm/stats"),
+-		src => $array("../../vm/stats","mod_neko","cgi"),
 -		inc => "httpd.h",
 -		incname => "Apache 1.3.x"
 -	},
  	mod_neko2 => {
- 		src => $array("mod_neko","cgi","../../vm/stats"),
+ 		src => $array("../../vm/stats","mod_neko","cgi"),
  		inc => $array("httpd.h","apr.h"),
 @@ -56,8 +51,7 @@
  		src => $array("mysql"),
@@ -27,43 +27,42 @@ Index: neko/src/tools/install.neko
 -		lparams => "-lz -lssl"
 +		lparams => "-lmysqlclient"
  	},
- 	regexp => {
- 		src => $array("regexp"),
-@@ -82,12 +76,7 @@
+ 	mysql5 => {
+ 		src => $array("../common/sha1","../common/socket","my_proto/my_proto","my_proto/my_api","mysql"),
+@@ -88,13 +82,7 @@
  		inc => switch system { "Mac" => "Carbon.h" default => "gtk/gtk.h" },
  		incname => switch system { "Mac" => "Carbon" default => "GTK+2.0" },
  		cflags => switch system { "Mac" => "" default => "`pkg-config --cflags gtk+-2.0`" },
 -		lparams => switch system { "Mac" => "-framework Carbon" default => "`pkg-config --libs gtk+-2.0` -lgthread-2.0" },
 -	},
 -	mod_tora => {
--		src => $array("mod_tora","protocol"),
+-		src => $array("../common/socket","protocol","mod_tora"),
 -		inc => "httpd.h",
--		incname => "Apache 1.3.x"
+-		incname => "Apache 1.3.x",
+-		cflags => "-I../common",
 +		lparams => switch system { "Mac" => "-framework Carbon" default => "-lgthread-2.0" },
  	},
  	mod_tora2 => {
- 		src => $array("mod_tora","protocol"),
-@@ -101,15 +90,16 @@
+ 		src => $array("../common/socket","protocol","mod_tora"),
+@@ -108,15 +96,14 @@
  
  // PLATFORM
  
--cflags = "-O3 -fPIC -pthread";
+-cflags = "-O3 -fPIC";
 +cflags = "-O3 -DEAPI -fPIC -pthread $(pkg-config --cflags apr-1)";
+ if( system == "Linux" ) cflags += " -pthread";
  cc = getenv("CC");
  if( cc == null ) cc = "gcc";
  linkcmd = switch system { "BSD" => "ld" default => cc };
 -linkneko = "-lneko";
-+
  linkoptions = switch system {
- 	"Mac" => "-bundle -undefined dynamic_lookup -L../../bin -pthread"
+ 	"Mac" => "-bundle -undefined dynamic_lookup -L../../bin"
 -	default => "-shared -L../../bin -pthread"
 +	default => "-shared -L../../bin -pthread -lneko" 
  };
-+
  nekovm = switch system { "Windows" => "..\\bin\\neko" default => "../bin/neko" };
  
- if( osx_universal ) {
-@@ -132,38 +122,15 @@
+@@ -141,38 +128,15 @@
  search_includes = function(isap2) {
  	var inc1 = $array(
  		"/usr/include",
@@ -107,8 +106,8 @@ Index: neko/src/tools/install.neko
  	return $aconcat($array(inc1,inc2));
  }
  
-@@ -171,10 +138,6 @@
- 	"../../libs/include",
+@@ -182,10 +146,6 @@
+ 	cwd,
  	"/usr/lib",
  	"/usr/lib/mysql",
 -	"/usr/local/lib",
@@ -118,9 +117,9 @@ Index: neko/src/tools/install.neko
  );
  
  exec = function(cmd) {
-@@ -283,8 +246,6 @@
- link = function(files,target,params1,params2) {
- 	files = make("",map(files,function(f){ f + ".o" }));
+@@ -299,8 +259,6 @@
+ 		dir[0] + ".o"
+ 	}));
  	var opt = linkoptions;
 -	if( target != "mod_tora" && target != "mod_tora2" )
 -		opt += " "+linkneko;

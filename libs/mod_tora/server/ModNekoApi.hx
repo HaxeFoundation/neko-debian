@@ -15,7 +15,7 @@
 /*																			*/
 /* ************************************************************************ */
 import neko.NativeString;
-import Client.Code;
+import tora.Code;
 
 class ModNekoApi {
 
@@ -25,6 +25,8 @@ class ModNekoApi {
 	public function new(client) {
 		this.client = client;
 	}
+
+	// mod_neko API
 
 	function cgi_set_main( f : Void -> Void ) {
 		main = f;
@@ -43,13 +45,11 @@ class ModNekoApi {
 	}
 
 	function redirect( url : NativeString ) {
-		headersNotSent("Redirection");
-		client.sendMessage(CRedirect,NativeString.toString(url));
+		addHeader("Redirection",CRedirect,NativeString.toString(url));
 	}
 
 	function set_return_code( code : Int ) {
-		headersNotSent("Return code");
-		client.sendMessage(CReturnCode,Std.string(code));
+		addHeader("Return code",CReturnCode,Std.string(code));
 	}
 
 	function get_client_header( header : NativeString ) {
@@ -89,9 +89,9 @@ class ModNekoApi {
 	}
 
 	function set_header( header : NativeString, value : NativeString ) {
-		headersNotSent(NativeString.toString(header));
-		client.sendMessage(CHeaderKey,NativeString.toString(header));
-		client.sendMessage(CHeaderValue,NativeString.toString(value));
+		var h = NativeString.toString(header);
+		addHeader(h,CHeaderKey,NativeString.toString(header));
+		addHeader(h,CHeaderValue,NativeString.toString(value));
 	}
 
 	function get_cookies() {
@@ -129,8 +129,8 @@ class ModNekoApi {
 		buf.add("=");
 		buf.add(value);
 		buf.add(";");
-		client.sendMessage(CHeaderKey,"Set-Cookie");
-		client.sendMessage(CHeaderAddValue,buf.toString());
+		addHeader("Cookie",CHeaderKey,"Set-Cookie");
+		addHeader("Cookie",CHeaderAddValue,buf.toString());
 	}
 
 	function parse_multipart_data( onPart : NativeString -> NativeString -> Void, onData : NativeString -> Int -> Int -> Void ) {
@@ -138,6 +138,7 @@ class ModNekoApi {
 		client.sendMessage(CQueryMultipart,Std.string(bufsize));
 		var filename = null;
 		var buffer = haxe.io.Bytes.alloc(bufsize);
+		var error = null;
 		while( true ) {
 			var msg = client.readMessageBuffer(buffer);
 			switch( msg ) {
@@ -146,10 +147,20 @@ class ModNekoApi {
 			case CPartFilename:
 				filename = buffer.sub(0,client.bytes).getData();
 			case CPartKey:
-				onPart( buffer.sub(0,client.bytes).getData(), filename );
+				if( error == null )
+					try {
+						onPart( buffer.sub(0,client.bytes).getData(), filename );
+					} catch( e : Dynamic ) {
+						error = { r : e };
+					}
 				filename = null;
 			case CPartData:
-				onData( buffer.getData(), 0, client.bytes );
+				if( error == null )
+					try {
+						onData( buffer.getData(), 0, client.bytes );
+					} catch( e : Dynamic ) {
+						error = { r : e };
+					}
 			case CPartDone:
 			case CError:
 				throw buffer.readString(0,client.bytes);
@@ -157,9 +168,12 @@ class ModNekoApi {
 				throw "Unexpected "+msg;
 			}
 		}
+		if( error != null )
+			neko.Lib.rethrow(error.r);
 	}
 
 	function cgi_flush() {
+		client.sendHeaders();
 		client.sendMessage(CFlush,"");
 	}
 
@@ -171,23 +185,18 @@ class ModNekoApi {
 		client.sendMessage(CLog,NativeString.toString(msg));
 	}
 
-	function tora_infos() {
-		return Tora.inst.infos();
-	}
-
-	function tora_command(cmd,param) {
-		return Tora.inst.command(cmd,param);
-	}
+	// internal APIS
 
 	public function print( value : Dynamic ) {
 		var str = NativeString.toString(untyped if( __dollar__typeof(value) == __dollar__tstring ) value else __dollar__string(value));
-		client.headersSent = true;
+		client.sendHeaders();
 		client.dataBytes += str.length;
 		client.sendMessage(CPrint,str);
 	}
 
-	inline function headersNotSent( msg : String ) {
+	function addHeader( msg : String, c : Code, str : String ) {
 		if( client.headersSent ) throw NativeString.ofString("Cannot set "+msg+" : Headers already sent");
+		client.outputHeaders.add({ code : c, str : str });
 	}
 
 	static function makeTable( list : Array<{ k : String, v : String }> ) : Dynamic {

@@ -1,4 +1,4 @@
-## soname-strip.dpatch by Jens Peter Secher <jps@debian.org>
+## soname-strip.diff by Jens Peter Secher <jps@debian.org>
 ##
 ## Make it possible to override the stripping of the neko executable
 ## prior to building rest of compiler tools and introduce a proper
@@ -6,8 +6,8 @@
 
 Index: neko/Makefile
 ===================================================================
---- neko.orig/Makefile	2009-03-25 23:23:28.000000000 +0100
-+++ neko/Makefile	2009-03-25 23:25:03.000000000 +0100
+--- neko.orig/Makefile	2009-07-28 22:03:49.000000000 +0200
++++ neko/Makefile	2009-07-28 22:10:37.000000000 +0200
 @@ -4,24 +4,17 @@
  
  CFLAGS = -Wall -O3 -fPIC -fomit-frame-pointer -I vm -D_GNU_SOURCE
@@ -15,7 +15,7 @@ Index: neko/Makefile
 -MAKESO = $(CC) -shared -WBsymbolic
 -LIBNEKO_NAME = libneko.so
 +MAJOR=0
-+MINOR=0
++MINOR=1
 +MAKESO = $(CC) -shared
 +LIBNEKO_NAME = libneko.so.${MAJOR}.${MINOR}
  LIBNEKO_LIBS = -ldl -lgc -lm
@@ -74,7 +74,7 @@ Index: neko/Makefile
 -
 -export MACOSX_DEPLOYMENT_TARGET_i386=10.4
 -export MACOSX_DEPLOYMENT_TARGET_ppc=10.3
--CFLAGS += -arch ppc -arch i386 -L/usr/local/lib
+-CFLAGS += -arch ppc -arch i386 -L/usr/local/lib -L/opt/local/lib -I/opt/local/include
 -UNIV = libs/include/osx_universal
 -#linking to shared lib (.a) explicitly:
 -LIBNEKO_DEPS = ${UNIV}/libgc.a  -lSystemStubs
