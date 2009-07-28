@@ -14,34 +14,7 @@
 /* Lesser General Public License or the LICENSE file for more details.		*/
 /*																			*/
 /* ************************************************************************ */
-
-enum Code {
-	CFile;
-	CUri;
-	CClientIP;
-	CGetParams;
-	CPostData;
-	CHeaderKey;
-	CHeaderValue;
-	CHeaderAddValue;
-	CParamKey;
-	CParamValue;
-	CHostName;
-	CHttpMethod;
-	CExecute;
-	CError;
-	CPrint;
-	CLog;
-	CFlush;
-	CRedirect;
-	CReturnCode;
-	CQueryMultipart;
-	CPartFilename;
-	CPartKey;
-	CPartData;
-	CPartDone;
-	CTestConnect;
-}
+import tora.Code;
 
 class Client {
 
@@ -65,15 +38,33 @@ class Client {
 	public var hostName : String;
 	public var httpMethod : String;
 	public var headersSent : Bool;
+	public var outputHeaders : List<{ code : Code, str : String }>;
+
+	// queue variables
+	public var secure : Bool;
+	public var onNotify : Dynamic -> Void;
+	public var onStop : Void -> Void;
+	public var notifyApi : ModToraApi;
+	public var messageQueue : neko.vm.Deque<Dynamic>;
+	public var removeFromQueue : Void -> Void;
 
 	var key : String;
 
-	public function new(s) {
+	public function new(s,secure) {
 		sock = s;
+		this.secure = secure;
 		dataBytes = 0;
 		headersSent = false;
 		headers = new Array();
+		outputHeaders = new List();
 		params = new Array();
+	}
+
+	public function sendHeaders() {
+		if( headersSent ) return;
+		headersSent = true;
+		for( h in outputHeaders )
+			sendMessage(h.code,h.str);
 	}
 
 	public function readMessageBuffer( buf : haxe.io.Bytes ) : Code {
@@ -89,8 +80,22 @@ class Client {
 	public function readMessage() : Code {
 		var i = sock.input;
 		var code = i.readByte();
-		if( code == 0 || code > CODES.length )
+		if( code == 0 || code > CODES.length ) {
+			if( code == "<".code ) {
+				try {
+					data = i.readString(22);
+				} catch( e : Dynamic ) {
+					data = null;
+				}
+				if( data == "policy-file-request/>\x00" ) {
+					var str = Tora.inst.getCrossDomainXML();
+					sock.output.writeString(str);
+					data = null;
+					return CTestConnect;
+				}
+			}
 			throw "Invalid proto code "+code;
+		}
 		var len = i.readUInt24();
 		data = i.readString(len);
 		return Reflect.field(Code,CODES[code-1]);
@@ -107,19 +112,29 @@ class Client {
 		var code = readMessage();
 		//trace(Std.string(code)+" ["+data+"]");
 		switch( code ) {
-		case CFile: file = data;
+		case CFile: if( secure ) file = data;
 		case CUri: uri = data;
-		case CClientIP: ip = data;
+		case CClientIP: if( secure ) ip = data;
 		case CGetParams: getParams = data;
 		case CPostData: postData = data;
 		case CHeaderKey: key = data;
 		case CHeaderValue, CHeaderAddValue: headers.push({ k : key, v : data });
 		case CParamKey: key = data;
 		case CParamValue: params.push({ k : key, v : data });
-		case CHostName: hostName = data;
+		case CHostName: if( secure ) hostName = data;
 		case CHttpMethod: httpMethod = data;
 		case CExecute: execute = true; return true;
 		case CTestConnect: execute = false; return true;
+		case CHostResolve:
+			hostName = data;
+			ip = sock.peer().host.toString();
+			file = Tora.inst.resolveHost(hostName);
+			httpMethod = "TORA";
+			if( file == null ) {
+				sendMessage(CError,"Unknown host");
+				execute = false;
+				return true;
+			}
 		case CError: throw data;
 		default: throw "Unexpected "+Std.string(code);
 		}

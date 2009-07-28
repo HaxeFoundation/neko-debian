@@ -152,8 +152,15 @@ static value process_run( value cmd, value vargs ) {
 		neko_error();
 	p = (vprocess*)alloc_private(sizeof(vprocess));
 	p->pid = fork();
-	if( p->pid == -1 )
+	if( p->pid == -1 ) {
+		do_close(input[0]);
+		do_close(input[1]);
+		do_close(output[0]);
+		do_close(output[1]);
+		do_close(error[0]);
+		do_close(error[1]);
 		neko_error();
+	}
 	// child
 	if( p->pid == 0 ) {
 		close(input[1]);
@@ -210,8 +217,14 @@ static value process_stdout_read( value vp, value str, value pos, value len ) {
 		return alloc_int(nbytes);
 	}
 #	else
-	int nbytes = read(p->oread,val_string(str)+val_int(pos),val_int(len));
-	if( nbytes <= 0 )
+	int nbytes;
+	POSIX_LABEL(stdout_read_again);
+	nbytes = read(p->oread,val_string(str)+val_int(pos),val_int(len));
+	if( nbytes < 0 ) {
+		HANDLE_EINTR(stdout_read_again);
+		neko_error();
+	}
+	if( nbytes == 0 )
 		neko_error();
 	return alloc_int(nbytes);
 #	endif
@@ -235,8 +248,14 @@ static value process_stderr_read( value vp, value str, value pos, value len ) {
 		return alloc_int(nbytes);
 	}
 #	else
-	int nbytes = read(p->eread,val_string(str)+val_int(pos),val_int(len));
-	if( nbytes <= 0 )
+	int nbytes;
+	POSIX_LABEL(stderr_read_again);
+	nbytes = read(p->eread,val_string(str)+val_int(pos),val_int(len));
+	if( nbytes < 0 ) {
+		HANDLE_EINTR(stderr_read_again);
+		neko_error();
+	}
+	if( nbytes == 0 )
 		neko_error();
 	return alloc_int(nbytes);
 #	endif
@@ -260,9 +279,13 @@ static value process_stdin_write( value vp, value str, value pos, value len ) {
 		return alloc_int(nbytes);
 	}
 #	else
-	int nbytes = write(p->iwrite,val_string(str)+val_int(pos),val_int(len));
-	if( nbytes == -1 )
+	int nbytes;
+	POSIX_LABEL(stdin_write_again);
+	nbytes = write(p->iwrite,val_string(str)+val_int(pos),val_int(len));
+	if( nbytes == -1 ) {
+		HANDLE_EINTR(stdin_write_again);
 		neko_error();
+	}
 	return alloc_int(nbytes);
 #	endif
 }
@@ -350,6 +373,22 @@ static value process_close( value vp ) {
 	return val_null;
 }
 
+/**
+	process_kill : 'process -> void
+	<doc>
+	Terminates a running process.
+	</doc>
+**/
+static value process_kill( value vp ) {
+	val_check_kind(vp,k_process);
+#	ifdef NEKO_WINDOWS
+	TerminateProcess(val_process(vp)->pinf.hProcess,-1);
+#	else
+	kill(val_process(vp)->pid,9);
+#	endif
+	return val_null;
+}
+
 DEFINE_PRIM(process_run,2);
 DEFINE_PRIM(process_stdout_read,4);
 DEFINE_PRIM(process_stderr_read,4);
@@ -358,5 +397,6 @@ DEFINE_PRIM(process_stdin_write,4);
 DEFINE_PRIM(process_exit,1);
 DEFINE_PRIM(process_pid,1);
 DEFINE_PRIM(process_close,1);
+DEFINE_PRIM(process_kill,1);
 
 /* ************************************************************************ */

@@ -127,6 +127,8 @@ EXTERN neko_vm *neko_vm_alloc( void *custom ) {
 }
 
 EXTERN int neko_vm_jit( neko_vm *vm, int enable_jit ) {
+	if( enable_jit < 0 )
+		return vm->run_jit;
 	if( enable_jit )
 		vm->run_jit = neko_can_jit();
 	else
@@ -640,7 +642,7 @@ int_val neko_interp_loop( neko_vm *VM_ARG, neko_module *m, int_val _acc, int_val
 			value *f;
 			value old = (value)acc, tacc = (value)acc;
 			do {
-				f = otable_find(((vobject*)acc)->table,(field)*pc);
+				f = otable_find(&((vobject*)acc)->table,(field)*pc);
 				if( f )
 					break;
 				acc = (int_val)((vobject*)tacc)->proto;
@@ -721,7 +723,7 @@ int_val neko_interp_loop( neko_vm *VM_ARG, neko_module *m, int_val _acc, int_val
 	Instr(SetField)
 		if( val_is_object(*sp) ) {
 			ACC_BACKUP;
-			otable_replace(((vobject*)*sp)->table,(field)*pc,(value)acc);
+			otable_replace(&((vobject*)*sp)->table,(field)*pc,(value)acc);
 			ACC_RESTORE;
 		} else
 			InvalidFieldAccess();

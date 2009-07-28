@@ -14,6 +14,10 @@
 /* Lesser General Public License or the LICENSE file for more details.		*/
 /*																			*/
 /* ************************************************************************ */
+#ifdef __APPLE__
+// prevent later redefinition of bool
+#	include <dlfcn.h>
+#endif
 #include "vm.h"
 #include <string.h>
 
@@ -29,17 +33,18 @@ struct _mt_local {
 #ifdef NEKO_WINDOWS
 // necessary for TryEnterCriticalSection
 // which is only available on 2000 PRO and XP
-#	define _WIN32_WINNT 0x0400 
-#	ifdef NEKO_STANDALONE
-#		define GC_NOT_DLL
-#	else
-#		define GC_DLL
-#	endif
+#	define _WIN32_WINNT 0x0400
+#	define GC_NOT_DLL
 #	define GC_WIN32_THREADS
 #endif
 
 #define GC_THREADS
 #include <gc/gc.h>
+
+#if GC_VERSION_MAJOR < 7
+#	define GC_SUCCESS	0
+#	define GC_DUPLICATE	1
+#endif
 
 #ifdef NEKO_WINDOWS
 
@@ -59,9 +64,13 @@ struct _mt_lock {
 	pthread_mutex_t lock;
 };
 
-#endif
+// should be enough to store any GC_stack_base
+// implementation
+typedef char __stack_base[64];
 
 #endif
+
+#endif // !NEKO_THREADS
 
 typedef struct {
 	thread_main_func init;
@@ -79,9 +88,9 @@ typedef struct {
 #ifdef NEKO_THREADS
 
 #ifdef NEKO_WINDOWS
-#	define THREAD_FUN DWORD WINAPI 
+#	define THREAD_FUN DWORD WINAPI
 #else
-#	define THREAD_FUN void*
+#	define THREAD_FUN void *
 #endif
 
 typedef int (*rec)( int, void * );
@@ -133,37 +142,106 @@ EXTERN int neko_thread_create( thread_main_func init, thread_main_func main, voi
 		return 1;
 	}
 #	else
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr,PTHREAD_CREATE_DETACHED);
 	pthread_mutex_init(&p.lock,NULL);
 	pthread_mutex_lock(&p.lock);
 	// force the use of a the GC method to capture created threads
 	// this function should be defined in gc/gc.h
-	if( GC_pthread_create((pthread_t*)handle,NULL,&ThreadMain,&p) != 0 ) {
+	if( GC_pthread_create((pthread_t*)handle,&attr,&ThreadMain,&p) != 0 ) {
+		pthread_attr_destroy(&attr);
 		pthread_mutex_destroy(&p.lock);
 		return 0;
 	}
 	pthread_mutex_lock(&p.lock);
+	pthread_attr_destroy(&attr);
 	pthread_mutex_destroy(&p.lock);
 	return 1;
 #	endif
 }
 
 #if defined(NEKO_POSIX) && defined(NEKO_THREADS)
-#	if GC_VERSION_MAJOR >= 7
-	extern void GC_do_blocking( void (*fn)(void *), void *arg );
-#	else
-	extern void GC_start_blocking();
-	extern void GC_end_blocking();
-#	define GC_do_blocking(f,arg) { GC_start_blocking(); f(arg); GC_end_blocking(); }
-#	endif
-#else
-#	define GC_do_blocking(f,arg)	f(arg)
+#	include <dlfcn.h>
+	typedef void (*callb_func)( thread_main_func, void * );
+	typedef int (*std_func)();
+	typedef int (*gc_stack_ptr)( __stack_base * );
+
+static int do_nothing( __stack_base *sb ) {
+	return -1;
+}
+
 #endif
 
 EXTERN void neko_thread_blocking( thread_main_func f, void *p ) {
-	//GC_do_blocking(f,p);	
-	// commented, since 7.0 is not yet widespread and since
-	// we don't want to build a libneko that is tied to a specific GC version
+#	if !defined(NEKO_THREADS)
+	f(p); // nothing
+#	elif defined(NEKO_WINDOWS)
+	f(p); // we don't have pthreads issues
+#	else
+	// we have different APIs depending on the GC version, make sure we load
+	// the good one at runtime
+	static callb_func do_blocking = NULL;
+	static std_func start = NULL, end = NULL;
+	if( do_blocking )
+		do_blocking(f,p);
+	else if( start ) {
+		start();
+		f(p);
+		end();
+	} else {
+		void *self = dlopen(NULL,0);
+		do_blocking = (callb_func)dlsym(self,"GC_do_blocking");
+		if( !do_blocking ) {
+			start = (std_func)dlsym(self,"GC_start_blocking");
+			end = (std_func)dlsym(self,"GC_end_blocking");
+			if( !start || !end )
+				val_throw(alloc_string("Could not init GC blocking API"));
+		}
+		neko_thread_blocking(f,p);
+	}
+#	endif
 }
+
+EXTERN bool neko_thread_register( bool t ) {
+#	if !defined(NEKO_THREADS)
+	return 0;
+#	elif defined(NEKO_WINDOWS)
+	struct GC_stack_base sb;
+	int r;
+	if( !t )
+		return GC_unregister_my_thread() == GC_SUCCESS;
+	if( GC_get_stack_base(&sb) != GC_SUCCESS )
+		return 0;
+	r = GC_register_my_thread(&sb);
+	return( r == GC_SUCCESS || r == GC_DUPLICATE );
+#	else
+	// since the API is only available on GC 7.0,
+	// we will do our best to locate it dynamically
+	static gc_stack_ptr get_sb = NULL, my_thread = NULL;
+	static std_func unreg_my_thread = NULL;
+	if( !t && unreg_my_thread != NULL ) {
+		return unreg_my_thread() == GC_SUCCESS;
+	} else if( my_thread != NULL ) {
+		__stack_base sb;
+		int r;
+		if( get_sb(&sb) != GC_SUCCESS )
+			return 0;
+		r = my_thread(&sb);
+		return( r == GC_SUCCESS || r == GC_DUPLICATE );
+	} else {
+		void *self = dlopen(NULL,0);
+		my_thread = (gc_stack_ptr)dlsym(self,"GC_register_my_thread");
+		get_sb = (gc_stack_ptr)dlsym(self,"GC_get_stack_base");
+		unreg_my_thread = (std_func)dlsym(self,"GC_unregister_my_thread");
+		if( my_thread == NULL ) my_thread = do_nothing;
+		if( get_sb == NULL ) get_sb = do_nothing;
+		if( unreg_my_thread == NULL ) unreg_my_thread = (std_func)do_nothing;
+		return neko_thread_register(t);
+	}
+#	endif
+}
+
 
 EXTERN mt_local *alloc_local() {
 #	if !defined(NEKO_THREADS)

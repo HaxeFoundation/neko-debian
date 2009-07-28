@@ -17,6 +17,7 @@
 #include "vm.h"
 #include "neko_mod.h"
 #include "objtable.h"
+#include <stdlib.h>
 #include <string.h>
 #include <math.h>
 #include <stdio.h>
@@ -27,8 +28,8 @@
 #	define USE_MMAP
 #endif
 
-#define tmp_alloc		alloc_private
-#define tmp_free(ptr)
+#define tmp_alloc(size) malloc(size)
+#define tmp_free(ptr)	free(ptr)
 
 #if defined(NEKO_X86) && !defined(NEKO_MAC)
 #define JIT_ENABLE
@@ -579,6 +580,20 @@ static void debug_method_call( int line, int stack ) {
 	printf("Stack align error line %d (%d)\n" , line ,stack);
 	exit(-1);
 }
+#endif
+
+#ifdef JIT_DEBUG
+
+static void val_print_2( value v ) {
+	val_print(alloc_string(" "));
+	val_print(v);
+}
+
+static void val_print_3( value v ) {
+	val_print_2(v);
+	val_print(alloc_string("\n"));
+}
+
 #endif
 
 static jit_ctx *jit_init_context( void *ptr, int size ) {
@@ -1386,7 +1401,10 @@ static void jit_add( jit_ctx *ctx, int _ ) {
 	XCmp_rb(TMP2,VAL_OBJECT);
 	XJump(JEq,joop2);
 	PATCH_JUMP(jnext);
+	XMov_rp(TMP2,Esp,FIELD(1+PAD_OPT(2)));
+	XPush_r(TMP2);
 	label(code->oop_r[OP_ADD]);
+	stack_pop(Esp,1);
 	END();
 
 	// is_other(acc) && !is_int(sp) && is_string(sp) -> BUF
@@ -1405,7 +1423,10 @@ static void jit_add( jit_ctx *ctx, int _ ) {
 	// object op
 	PATCH_JUMP(joop1);
 	PATCH_JUMP(joop2);
+	XMov_rp(TMP2,Esp,FIELD(1+PAD_OPT(2)));
+	XPush_r(TMP2);
 	label(code->oop[OP_ADD]);
+	stack_pop(Esp,1);
 	END();
 
 	// errors
@@ -1766,13 +1787,14 @@ static void jit_opcode( jit_ctx *ctx, enum OPCODE op, int p ) {
 		XMov_rr(VM,ACC);
 		XPush_c(p);
 		start = buf.c;
-		XMov_rp(TMP,VM,FIELD(1));
+		XMov_rr(TMP,VM);
+		XAdd_rc(TMP,FIELD(1));
 		XPush_r(TMP);
 		XCall_m(otable_find);
 		XCmp_rc(ACC,0);
 		XJump(JNeq,jend1);
 		stack_pop(Esp,1);
-		XMov_rp(VM,VM,FIELD(2)); // acc = acc->proto
+		XMov_rp(VM,VM,FIELD(3)); // acc = acc->proto
 		XCmp_rc(VM,0);
 		XJump(JNeq,loop);
 		*loop = (int)(start - buf.c);
@@ -1842,7 +1864,7 @@ static void jit_opcode( jit_ctx *ctx, enum OPCODE op, int p ) {
 		stack_pad(2);
 		XPush_r(ACC);
 		XPush_c(p);
-		XMov_rp(TMP,TMP,FIELD(1));
+		XAdd_rc(TMP,FIELD(1));
 		XPush_r(TMP);
 		XCall_m(otable_replace);
 		stack_pop(Esp,3);
@@ -2510,8 +2532,12 @@ static char *alloc_jit_mem( int size ) {
 	// round to next page
 	size += (4096 - size%4096);
 	p = (int*)mmap(NULL,size,PROT_READ|PROT_WRITE|PROT_EXEC,(MAP_PRIVATE|MAP_ANON),-1,0);
-	if( p == (int*)-1 )
-		val_throw(alloc_string("Failed to allocate JIT memory"));
+	if( p == (int*)-1 ) {
+		buffer b = alloc_buffer("Failed to allocate JIT memory ");
+		val_buffer(b,alloc_int(size>>10));
+		val_buffer(b,alloc_string("KB"));
+		val_throw(buffer_to_string(b));
+	}
 	*p = size;
 	return (char*)(p + 1);
 }
@@ -2636,7 +2662,7 @@ void neko_module_jit( neko_module *m ) {
 			stack_pop(Esp,1);
 			// val_print(pc_pos)
 			XPush_c(CONST(alloc_int(i)));
-			XCall_m_real(val_print);
+			XCall_m_real(val_print_2);
 			stack_pop(Esp,1);
 			// val_print(alloc_int(spmax - sp))
 			get_var_r(TMP,VSpMax);
@@ -2644,7 +2670,7 @@ void neko_module_jit( neko_module *m ) {
 			XShr_rc(TMP,1);
 			XOr_rc(TMP,1);
 			XPush_r(TMP);
-			XCall_m_real(val_print);
+			XCall_m_real(val_print_2);
 			stack_pop(Esp,1);
 			// val_print(alloc_int(csp - spmin))
 			XMov_rp(TMP2,VM,VMFIELD(spmin));
@@ -2653,7 +2679,7 @@ void neko_module_jit( neko_module *m ) {
 			XShr_rc(TMP,1);
 			XOr_rc(TMP,1);
 			XPush_r(TMP);
-			XCall_m_real(val_print);
+			XCall_m_real(val_print_3);
 			stack_pop(Esp,1);
 
 			XPop_r(ACC);

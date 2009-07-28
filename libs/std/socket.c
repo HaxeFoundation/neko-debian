@@ -16,6 +16,7 @@
 /* ************************************************************************ */
 #include <string.h>
 #include <neko.h>
+#include <neko_vm.h>
 #ifdef NEKO_WINDOWS
 #	include <winsock2.h>
 #	define FDSIZE(n)	(sizeof(u_int) + (n) * sizeof(SOCKET))
@@ -29,6 +30,7 @@
 #	include <sys/socket.h>
 #	include <sys/time.h>
 #	include <netinet/in.h>
+#	include <netinet/tcp.h>
 #	include <arpa/inet.h>
 #	include <unistd.h>
 #	include <netdb.h>
@@ -45,6 +47,15 @@
 #if defined(NEKO_WINDOWS) || defined(NEKO_MAC)
 #	define MSG_NOSIGNAL 0
 #endif
+
+#define NRETRYS	20
+
+typedef struct {
+	SOCKET sock;
+	char *buf;
+	int size;
+	int ret;
+} sock_tmp;
 
 typedef struct {
 	int max;
@@ -184,10 +195,18 @@ static value socket_send( value o, value data, value pos, value len ) {
 	dlen = val_strlen(data);
 	if( p < 0 || l < 0 || p > dlen || p + l > dlen )
 		neko_error();
+	POSIX_LABEL(send_again);
 	dlen = send(val_sock(o), val_string(data) + p , l, MSG_NOSIGNAL);
-	if( dlen == SOCKET_ERROR )
+	if( dlen == SOCKET_ERROR ) {
+		HANDLE_EINTR(send_again);
 		return block_error();
+	}
 	return alloc_int(dlen);
+}
+
+static void tmp_recv( void *_t ) {
+	sock_tmp *t = (sock_tmp*)_t;
+	t->ret = recv(t->sock,t->buf,t->size,MSG_NOSIGNAL);
 }
 
 /**
@@ -196,7 +215,8 @@ static value socket_send( value o, value data, value pos, value len ) {
 	Return the number of bytes readed.</doc>
 **/
 static value socket_recv( value o, value data, value pos, value len ) {
-	int p,l,dlen;
+	int p,l,dlen,ret;
+	int retry = 0;
 	val_check_kind(o,k_socket);
 	val_check(data,string);
 	val_check(pos,int);
@@ -207,12 +227,20 @@ static value socket_recv( value o, value data, value pos, value len ) {
 	if( p < 0 || l < 0 || p > dlen || p + l > dlen )
 		neko_error();
 	POSIX_LABEL(recv_again);
-	dlen = recv(val_sock(o), val_string(data) + p , l, MSG_NOSIGNAL);
-	if( dlen == SOCKET_ERROR ) {
+	if( retry++ > NRETRYS ) {
+		sock_tmp t;
+		t.sock = val_sock(o);
+		t.buf = val_string(data) + p;
+		t.size = l;
+		neko_thread_blocking(tmp_recv,&t);
+		ret = t.ret;
+	} else
+		ret = recv(val_sock(o), val_string(data) + p , l, MSG_NOSIGNAL);
+	if( ret == SOCKET_ERROR ) {
 		HANDLE_EINTR(recv_again);
 		return block_error();
 	}
-	return alloc_int(dlen);
+	return alloc_int(ret);
 }
 
 /**
@@ -221,10 +249,19 @@ static value socket_recv( value o, value data, value pos, value len ) {
 **/
 static value socket_recv_char( value o ) {
 	int ret;
+	int retry = 0;
 	unsigned char cc;
 	val_check_kind(o,k_socket);
 	POSIX_LABEL(recv_char_again);
-	ret = recv(val_sock(o),&cc,1,MSG_NOSIGNAL);
+	if( retry++ > NRETRYS ) {
+		sock_tmp t;
+		t.sock = val_sock(o);
+		t.buf = (char*)&cc;
+		t.size = 1;
+		neko_thread_blocking(tmp_recv,&t);
+		ret = t.ret;
+	} else
+		ret = recv(val_sock(o),&cc,1,MSG_NOSIGNAL);
 	if( ret == SOCKET_ERROR ) {
 		HANDLE_EINTR(recv_char_again);
 		return block_error();
@@ -296,7 +333,7 @@ static value host_resolve( value host ) {
 	ip = inet_addr(val_string(host));
 	if( ip == INADDR_NONE ) {
 		struct hostent *h;
-#	ifdef NEKO_WINDOWS
+#	if defined(NEKO_WINDOWS) || defined(NEKO_MAC)
 		h = gethostbyname(val_string(host));
 #	else
 		struct hostent hbase;
@@ -331,7 +368,7 @@ static value host_reverse( value host ) {
 	unsigned int ip;
 	val_check(host,int32);
 	ip = val_int32(host);
-#	ifdef NEKO_WINDOWS
+#	if defined(NEKO_WINDOWS) || defined(NEKO_MAC)
 	h = gethostbyaddr((char *)&ip,4,AF_INET);
 #	else
 	struct hostent htmp;
@@ -498,9 +535,12 @@ static value socket_accept( value o ) {
 	unsigned int addrlen = sizeof(addr);
 	SOCKET s;
 	val_check_kind(o,k_socket);
+	POSIX_LABEL(accept_again);
 	s = accept(val_sock(o),(struct sockaddr*)&addr,&addrlen);
-	if( s == INVALID_SOCKET )
+	if( s == INVALID_SOCKET ) {
+		HANDLE_EINTR(accept_again);
 		return block_error();
+	}
 	return alloc_abstract(k_socket,(value)(int_val)s);
 }
 
@@ -788,6 +828,22 @@ static value socket_poll( value socks, value pdata, value timeout ) {
 	return a;
 }
 
+/**
+	socket_set_fast_send : 'socket -> bool -> void
+	<doc>
+	Disable or enable to TCP_NODELAY flag for the socket
+	</doc>
+**/
+static value socket_set_fast_send( value s, value f ) {
+	int fast;
+	val_check_kind(s,k_socket);
+	val_check(f,bool);
+	fast = val_bool(f);
+	if( setsockopt(val_sock(s),IPPROTO_TCP,TCP_NODELAY,(char*)&fast,sizeof(fast)) )
+		neko_error();
+	return val_null;
+}
+
 DEFINE_PRIM(socket_init,0);
 DEFINE_PRIM(socket_new,1);
 DEFINE_PRIM(socket_send,4);
@@ -807,6 +863,7 @@ DEFINE_PRIM(socket_host,1);
 DEFINE_PRIM(socket_set_timeout,2);
 DEFINE_PRIM(socket_shutdown,3);
 DEFINE_PRIM(socket_set_blocking,2);
+DEFINE_PRIM(socket_set_fast_send,2);
 
 DEFINE_PRIM(socket_poll_alloc,1);
 DEFINE_PRIM(socket_poll,3);

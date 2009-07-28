@@ -28,11 +28,7 @@
 #endif
 
 #ifdef NEKO_WINDOWS
-#	ifdef NEKO_STANDALONE
-#		define GC_NOT_DLL
-#	else
-#		define GC_DLL
-#	endif
+#	define GC_DLL
 #	define GC_WIN32_THREADS
 #endif
 
@@ -120,7 +116,7 @@ void neko_gc_init() {
 #if (GC_VERSION_MAJOR >= 7) && defined(NEKO_WINDOWS)
 	GC_all_interior_pointers = 0;
 #	ifndef NEKO_STANDALONE
-	GC_use_DllMain();
+	GC_use_DllMain(); // needed to auto-detect threads created by Apache
 #	endif
 #endif
 	GC_init();
@@ -308,10 +304,11 @@ EXTERN value alloc_object( value cpy ) {
 	v->t = VAL_OBJECT;
 	if( cpy == NULL || val_is_null(cpy) ) {
 		v->proto = NULL;
-		v->table = otable_empty();
+		otable_init(&v->table);
+
 	} else {
 		v->proto = ((vobject*)cpy)->proto;
-		v->table = otable_copy(((vobject*)cpy)->table);
+		otable_copy(&((vobject*)cpy)->table,&v->table);
 	}
 	return (value)v;
 }
@@ -324,7 +321,7 @@ EXTERN value copy_string( const char *str, int_val strlen ) {
 }
 
 EXTERN void alloc_field( value obj, field f, value v ) {
-	otable_replace(((vobject*)obj)->table,f,v);
+	otable_replace(&((vobject*)obj)->table,f,v);
 }
 
 static void __on_finalize( value v, void *f ) {
@@ -363,11 +360,11 @@ EXTERN void neko_global_init() {
 	neko_gc_init();
 	neko_vm_context = alloc_local();
 	neko_fields_lock = alloc_lock();
-	neko_fields = (objtable*)alloc_root(NEKO_FIELDS_MASK+1);
+	neko_fields = (objtable*)alloc_root((NEKO_FIELDS_MASK+1) * sizeof(struct _objtable) / sizeof(value));
 	{
 		int i;
 		for(i=0;i<=NEKO_FIELDS_MASK;i++)
-			neko_fields[i] = otable_empty();
+			otable_init(&neko_fields[i]);
 	}
 	neko_init_builtins();
 	kind_names = (kind_list**)alloc_root(1);

@@ -133,10 +133,12 @@ static value gc_stats() {
 }
 
 /**
-	enable_jit : bool -> void
-	<doc>Enable or disable the JIT.</doc>
+	enable_jit : ?bool -> ?bool
+	<doc>Enable or disable the JIT. Calling enable_jit(null) tells if JIT is enabled or not</doc>
 **/
-static value enable_jit( value b ) {	
+static value enable_jit( value b ) {
+	if( val_is_null(b) )
+		return alloc_bool(neko_vm_jit(neko_vm_current(),-1));
 	val_check(b,bool);
 	neko_vm_jit(neko_vm_current(),val_bool(b));
 	return val_null;
@@ -188,7 +190,7 @@ static value set_trusted( value b ) {
 }
 
 /**
-	same_closure : f1 -> f2 -> bool
+	same_closure : any -> any -> bool
 	<doc>
 	Compare two functions by checking that they refer to the same implementation and that their environments contains physically equal values.
 	</doc>
