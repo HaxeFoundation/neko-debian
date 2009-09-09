@@ -1,3 +1,16 @@
+neko (1.8.1-2) unstable; urgency=low
+
+  * Do not install broken mysql5.ndll library.  The dynamically linked
+    mysql.ndll works fine for all versions of MySql.
+    (Closes: #542024)
+  * Build-Depend on generic libmysqlclient-dev instead of specific
+    version.
+  * Fixed build failure on kFreeBSD, thanks to Cyril Brulebois.
+    (Closes: #543995)
+  * Bumped the Standards-Version to 3.8.3, no changes.
+
+ -- Jens Peter Secher <jps@debian.org>  Wed, 09 Sep 2009 14:40:17 +0200
+
 neko (1.8.1-1) unstable; urgency=low
 
   * New upstream version.

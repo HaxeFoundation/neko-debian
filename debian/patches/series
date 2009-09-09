@@ -2,3 +2,4 @@ soname-strip.diff
 include-and-link.diff
 tora-missing-include.diff
 mysql-missing-include.diff
+kfreebsd-compile-fix.diff

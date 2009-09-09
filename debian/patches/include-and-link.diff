@@ -5,8 +5,8 @@
 
 Index: neko/src/tools/install.neko
 ===================================================================
---- neko.orig/src/tools/install.neko	2009-07-28 22:03:49.000000000 +0200
-+++ neko/src/tools/install.neko	2009-07-28 22:19:00.000000000 +0200
+--- neko.orig/src/tools/install.neko	2009-07-30 21:53:25.000000000 +0200
++++ neko/src/tools/install.neko	2009-09-09 13:49:49.000000000 +0200
 @@ -39,11 +39,6 @@
  // LIBS DATAS
  
@@ -19,17 +19,25 @@ Index: neko/src/tools/install.neko
  	mod_neko2 => {
  		src => $array("../../vm/stats","mod_neko","cgi"),
  		inc => $array("httpd.h","apr.h"),
-@@ -56,8 +51,7 @@
+@@ -55,15 +50,8 @@
+ 	mysql => {
  		src => $array("mysql"),
  		inc => "mysql.h",
- 		incname => "MySQL 4.+"
+-		incname => "MySQL 4.+"
 -		lib => "libmysqlclient_r.a",
 -		lparams => "-lz -lssl"
+-	},
+-	mysql5 => {
+-		src => $array("../common/sha1","../common/socket","my_proto/my_proto","my_proto/my_api","mysql"),
+-		inc => $array(),
+-		realdir => "mysql",
+-		cflags => "-Imy_proto -I../common",
++		incname => "MySQL"
 +		lparams => "-lmysqlclient"
  	},
- 	mysql5 => {
- 		src => $array("../common/sha1","../common/socket","my_proto/my_proto","my_proto/my_api","mysql"),
-@@ -88,13 +82,7 @@
+ 	regexp => {
+ 		src => $array("regexp"),
+@@ -88,13 +76,7 @@
  		inc => switch system { "Mac" => "Carbon.h" default => "gtk/gtk.h" },
  		incname => switch system { "Mac" => "Carbon" default => "GTK+2.0" },
  		cflags => switch system { "Mac" => "" default => "`pkg-config --cflags gtk+-2.0`" },
@@ -44,7 +52,7 @@ Index: neko/src/tools/install.neko
  	},
  	mod_tora2 => {
  		src => $array("../common/socket","protocol","mod_tora"),
-@@ -108,15 +96,14 @@
+@@ -108,15 +90,14 @@
  
  // PLATFORM
  
@@ -62,7 +70,7 @@ Index: neko/src/tools/install.neko
  };
  nekovm = switch system { "Windows" => "..\\bin\\neko" default => "../bin/neko" };
  
-@@ -141,38 +128,15 @@
+@@ -141,38 +122,15 @@
  search_includes = function(isap2) {
  	var inc1 = $array(
  		"/usr/include",
@@ -106,7 +114,7 @@ Index: neko/src/tools/install.neko
  	return $aconcat($array(inc1,inc2));
  }
  
-@@ -182,10 +146,6 @@
+@@ -182,10 +140,6 @@
  	cwd,
  	"/usr/lib",
  	"/usr/lib/mysql",
@@ -117,7 +125,7 @@ Index: neko/src/tools/install.neko
  );
  
  exec = function(cmd) {
-@@ -299,8 +259,6 @@
+@@ -299,8 +253,6 @@
  		dir[0] + ".o"
  	}));
  	var opt = linkoptions;

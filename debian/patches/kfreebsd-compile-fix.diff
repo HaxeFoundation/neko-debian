@@ -1,0 +1,57 @@
+Description: Fix build failure on GNU/kFreeBSD.
+ Use NEKO_POSIX instead of NEKO_LINUX.
+Author: Cyril Brulebois <kibi@debian.org>
+Bug-Debian: http://bugs.debian.org/543995
+Reviewed-by: Jens Peter Secher <jps@debian.org>
+Forwarded: yes
+Last-Update: 2009-09-09
+
+Index: neko/libs/ui/ui.c
+===================================================================
+--- neko.orig/libs/ui/ui.c	2009-09-09 14:05:50.000000000 +0200
++++ neko/libs/ui/ui.c	2009-09-09 14:06:53.000000000 +0200
+@@ -28,7 +28,7 @@
+ #	define UIEvent		0xFFFFAA00
+ #	define eCall		0x0
+ enum { pFunc = 'func' };
+-#elif defined(NEKO_LINUX)
++#elif defined(NEKO_POSIX)
+ #	include <gtk/gtk.h>
+ #	include <glib.h>
+ #	include <pthread.h>
+@@ -52,7 +52,7 @@
+ 	HWND wnd;
+ #elif defined(NEKO_MAC)
+ 	pthread_t tid;
+-#elif defined(NEKO_LINUX)
++#elif defined(NEKO_POSIX)
+ 	pthread_t tid;
+ 	pthread_mutex_t lock;
+ #endif
+@@ -98,7 +98,7 @@
+ 	return 0;
+ }
+ 
+-#elif defined(NEKO_LINUX)
++#elif defined(NEKO_POSIX)
+ 
+ static gint onSyncCall( gpointer data ) {
+ 	value *r = (value*)data;
+@@ -142,7 +142,7 @@
+ 	data.tid = pthread_self();
+ 	EventTypeSpec ets = { UIEvent, eCall };
+ 	InstallEventHandler(GetApplicationEventTarget(),NewEventHandlerUPP(handleEvents),1,&ets,0,0);
+-#	elif defined(NEKO_LINUX)
++#	elif defined(NEKO_POSIX)
+ 	g_thread_init(NULL);
+ 	gdk_threads_init();
+ 	gtk_init(NULL,NULL);
+@@ -236,7 +236,7 @@
+ 	SetEventParameter(e,pFunc,typeVoidPtr,sizeof(void*),&r);
+ 	PostEventToQueue(GetMainEventQueue(),e,kEventPriorityStandard);
+ 	ReleaseEvent(e);
+-#	elif defined(NEKO_LINUX)
++#	elif defined(NEKO_POSIX)
+ 	// the lock should not be needed because GTK is MT-safe
+ 	// however the GTK lock mechanism is a LOT slower than
+ 	// using a pthread_mutex
