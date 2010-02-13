@@ -20,6 +20,7 @@
 /* ************************************************************************ */
 #include <math.h>
 #include <string.h>
+#include "stdlib.h"
 #include "my_proto.h"
 
 #define MAX_PACKET_LENGTH 0xFFFFFF

@@ -39,11 +39,6 @@ buffer_string = $loader.loadprim("std@buffer_string",1);
 // LIBS DATAS
 
 libs = {
-	mod_neko => {
-		src => $array("../../vm/stats","mod_neko","cgi"),
-		inc => "httpd.h",
-		incname => "Apache 1.3.x"
-	},
 	mod_neko2 => {
 		src => $array("../../vm/stats","mod_neko","cgi"),
 		inc => $array("httpd.h","apr.h"),
@@ -55,15 +50,8 @@ libs = {
 	mysql => {
 		src => $array("mysql"),
 		inc => "mysql.h",
-		incname => "MySQL 4.+"
-		lib => "libmysqlclient_r.a",
-		lparams => "-lz -lssl"
-	},
-	mysql5 => {
-		src => $array("../common/sha1","../common/socket","my_proto/my_proto","my_proto/my_api","mysql"),
-		inc => $array(),
-		realdir => "mysql",
-		cflags => "-Imy_proto -I../common",
+		incname => "MySQL"
+		lparams => "-lmysqlclient"
 	},
 	regexp => {
 		src => $array("regexp"),
@@ -88,13 +76,7 @@ libs = {
 		inc => switch system { "Mac" => "Carbon.h" default => "gtk/gtk.h" },
 		incname => switch system { "Mac" => "Carbon" default => "GTK+2.0" },
 		cflags => switch system { "Mac" => "" default => "`pkg-config --cflags gtk+-2.0`" },
-		lparams => switch system { "Mac" => "-framework Carbon" default => "`pkg-config --libs gtk+-2.0` -lgthread-2.0" },
-	},
-	mod_tora => {
-		src => $array("../common/socket","protocol","mod_tora"),
-		inc => "httpd.h",
-		incname => "Apache 1.3.x",
-		cflags => "-I../common",
+		lparams => switch system { "Mac" => "-framework Carbon" default => "-lgthread-2.0" },
 	},
 	mod_tora2 => {
 		src => $array("../common/socket","protocol","mod_tora"),
@@ -108,15 +90,14 @@ libs = {
 
 // PLATFORM
 
-cflags = "-O3 -fPIC";
+cflags = "-O3 -DEAPI -fPIC -pthread $(pkg-config --cflags apr-1)";
 if( system == "Linux" ) cflags += " -pthread";
 cc = getenv("CC");
 if( cc == null ) cc = "gcc";
 linkcmd = switch system { "BSD" => "ld" default => cc };
-linkneko = "-lneko";
 linkoptions = switch system {
 	"Mac" => "-bundle -undefined dynamic_lookup -L../../bin"
-	default => "-shared -L../../bin -pthread"
+	default => "-shared -L../../bin -pthread -lneko" 
 };
 nekovm = switch system { "Windows" => "..\\bin\\neko" default => "../bin/neko" };
 
@@ -141,38 +122,15 @@ includes = $array(
 search_includes = function(isap2) {
 	var inc1 = $array(
 		"/usr/include",
-		"/usr/local/include/mysql",
 		"/usr/include/mysql",
-		"/usr/local/include",
 		"/usr/include/gtk-2.0",
-		"/opt/local/include",
-		"/opt/local/include/mysql",
-		"/Developer/Headers/FlatCarbon",
 	);
 	var inc2;
-	if( isap2 )
-		inc2 = $array(
-			"/usr/local/apache2/include",
-			"/usr/include/apache2",
-			"/opt/local/apache2/include",
-			"/usr/include/apr-1",
-			"/usr/include/apr-1.0",
-			"/usr/include/apr-0",
-			"/usr/local/include/apr-1",
-			"/usr/local/include/apr-1.0",
-			"/usr/local/include/apr-0",
-			"/opt/local/include/apr-1",
-			"/opt/local/include/apr-1.0",
-			"/opt/local/include/apr-0"
-		);
-	else
-		inc2 = $array(
-			"/usr/apache/include",
-			"/usr/include/apache-1.3",
-			"/usr/include/httpd",
-			"/opt/local/include/apache",
-			"/usr/local/apache/include"
-		);
+	inc2 = $array(
+		"/usr/include/apache2",
+		"/usr/include/apr-1",
+		"/usr/include/apr-1.0",
+	);
 	return $aconcat($array(inc1,inc2));
 }
 
@@ -182,10 +140,6 @@ libraries = $array(
 	cwd,
 	"/usr/lib",
 	"/usr/lib/mysql",
-	"/usr/local/lib",
-	"/usr/local/lib/mysql",
-	"/opt/local/lib",
-	"/opt/local/lib/mysql",
 );
 
 exec = function(cmd) {
@@ -299,8 +253,6 @@ link = function(files,target,params1,params2) {
 		dir[0] + ".o"
 	}));
 	var opt = linkoptions;
-	if( target != "mod_tora" && target != "mod_tora2" )
-		opt += " "+linkneko;
 	var cmd = linkcmd+" "+opt+" "+make("-L",libraries);
 	var out = " -o ../../bin/"+target+".ndll ";
 	exec(cmd+out+params1+files+params2);

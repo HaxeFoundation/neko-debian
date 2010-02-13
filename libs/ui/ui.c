@@ -28,7 +28,7 @@
 #	define UIEvent		0xFFFFAA00
 #	define eCall		0x0
 enum { pFunc = 'func' };
-#elif defined(NEKO_LINUX)
+#elif defined(NEKO_POSIX)
 #	include <gtk/gtk.h>
 #	include <glib.h>
 #	include <pthread.h>
@@ -52,7 +52,7 @@ typedef struct {
 	HWND wnd;
 #elif defined(NEKO_MAC)
 	pthread_t tid;
-#elif defined(NEKO_LINUX)
+#elif defined(NEKO_POSIX)
 	pthread_t tid;
 	pthread_mutex_t lock;
 #endif
@@ -98,7 +98,7 @@ static OSStatus handleEvents( EventHandlerCallRef ref, EventRef e, void *data ) 
 	return 0;
 }
 
-#elif defined(NEKO_LINUX)
+#elif defined(NEKO_POSIX)
 
 static gint onSyncCall( gpointer data ) {
 	value *r = (value*)data;
@@ -142,7 +142,7 @@ void ui_main() {
 	data.tid = pthread_self();
 	EventTypeSpec ets = { UIEvent, eCall };
 	InstallEventHandler(GetApplicationEventTarget(),NewEventHandlerUPP(handleEvents),1,&ets,0,0);
-#	elif defined(NEKO_LINUX)
+#	elif defined(NEKO_POSIX)
 	g_thread_init(NULL);
 	gdk_threads_init();
 	gtk_init(NULL,NULL);
@@ -236,7 +236,7 @@ static value ui_sync( value f ) {
 	SetEventParameter(e,pFunc,typeVoidPtr,sizeof(void*),&r);
 	PostEventToQueue(GetMainEventQueue(),e,kEventPriorityStandard);
 	ReleaseEvent(e);
-#	elif defined(NEKO_LINUX)
+#	elif defined(NEKO_POSIX)
 	// the lock should not be needed because GTK is MT-safe
 	// however the GTK lock mechanism is a LOT slower than
 	// using a pthread_mutex

@@ -17,6 +17,7 @@
 #include <string.h>
 #include "protocol.h"
 #include "socket.h"
+#include "stdlib.h"
 
 struct _protocol {
 	PSOCK s;
