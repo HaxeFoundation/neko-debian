@@ -1,3 +1,11 @@
+neko (1.8.1-5) unstable; urgency=low
+
+  * Attempt to avoid spurious build failures (stack overflows and
+    segmentation faults) by using both -fno-strict-aliasing and lower
+    optimisation level.
+
+ -- Jens Peter Secher <jps@debian.org>  Thu, 18 Feb 2010 22:26:27 +0100
+
 neko (1.8.1-4) unstable; urgency=low
 
   * Attempt to fix executable_path() on kFreeBSD, which only seemed to

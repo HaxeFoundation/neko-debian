@@ -1,10 +1,19 @@
 #!/usr/bin/make -f
-# debian/rules for neko.
+## debian/rules for neko.
 
-# Compile options
+## General compile options.
 cflags := -Wall -fPIC -fomit-frame-pointer -I vm -DCOMPACT_TABLE -D_GNU_SOURCE -g
+
+## Both AMD64 and all kFreeBSDs seem to have problems with the type
+## punning used in the Neko source.
+ifeq (amd64,$(DEB_HOST_ARCH))
+        cflags += -fno-strict-aliasing
+endif
+ifeq (kfreebsd,$(DEB_HOST_ARCH_OS))
+        cflags += -fno-strict-aliasing
+endif
 ifeq (,$(findstring noopt,$(DEB_BUILD_OPTIONS)))
-	cflags += -O3
+	cflags += -O2
 else
 	cflags += -O0
 endif
