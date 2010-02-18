@@ -1,3 +1,29 @@
+neko (1.8.1-5) unstable; urgency=low
+
+  * Attempt to avoid spurious build failures (stack overflows and
+    segmentation faults) by using both -fno-strict-aliasing and lower
+    optimisation level.
+
+ -- Jens Peter Secher <jps@debian.org>  Thu, 18 Feb 2010 22:26:27 +0100
+
+neko (1.8.1-4) unstable; urgency=low
+
+  * Attempt to fix executable_path() on kFreeBSD, which only seemed to
+    work when invoked from bash, thanks to Roman Neuhauser.
+
+ -- Jens Peter Secher <jps@debian.org>  Sat, 13 Feb 2010 16:34:13 +0100
+
+neko (1.8.1-3) unstable; urgency=low
+
+  * Converted to dpkg-source format 3.0 (quilt).
+  * Use mercurial-buildpackage for repository maintenance, so old
+    repository does not exist any more.
+  * Bumped Standards-Version to 3.8.4, no change.
+  * Use misc:Depends macro for all binary packages, and tighten depency
+    for the header-files package.
+
+ -- Jens Peter Secher <jps@debian.org>  Sat, 13 Feb 2010 15:20:34 +0100
+
 neko (1.8.1-2) unstable; urgency=low
 
   * Do not install broken mysql5.ndll library.  The dynamically linked
@@ -37,6 +63,7 @@ neko (1.8.0-3) unstable; urgency=low
   * Make neko-dev architecture independent since there are no binary files
     in neko-dev.
   * Bumped the Standards-Version to 3.8.1.
+  * Bumped debhelper version to 7.
 
  -- Jens Peter Secher <jps@debian.org>  Thu, 26 Mar 2009 20:00:40 +0100
 

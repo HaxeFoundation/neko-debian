@@ -4,4 +4,3 @@ tora-missing-include.diff
 mysql-missing-include.diff
 kfreebsd-compile-fix.diff
 kfreebsd-executable-path.diff
-

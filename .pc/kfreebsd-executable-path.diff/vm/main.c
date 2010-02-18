@@ -30,9 +30,6 @@
 #ifdef NEKO_POSIX
 #	include <signal.h>
 #endif
-#if defined(__FreeBSD_kernel__) || defined (__FreeBSD__)
-#	include <sys/sysctl.h>
-#endif
 
 #ifdef NEKO_STANDALONE
 	extern void neko_standalone_init();
@@ -60,24 +57,10 @@ static char *executable_path() {
 	if ( _NSGetExecutablePath(path, &path_len) )
 		return NULL;
 	return path;
-#elif defined(__FreeBSD_kernel__) || defined (__FreeBSD__)
-	int mib[4];
-	mib[0] = CTL_KERN;
-	mib[1] = KERN_PROC;
-	mib[2] = KERN_PROC_PATHNAME;
-	mib[3] = -1;
-	static char path[1024];
-	size_t length = sizeof(path);
-	sysctl(mib, 4, path, &length, NULL, 0);
-	if( length < 0 || length >= 1024 ) {
-		return NULL;
-	}
-	path[length] = '\0';
-	return path;
 #else
-	static char path[1024];
+	static char path[200];
 	int length = readlink("/proc/self/exe", path, sizeof(path));
-	if( length < 0 || length >= 1024 ) {
+	if( length < 0 || length >= 200 ) {
 		char *p = getenv("   "); // for upx
 		if( p == NULL )
 			p = getenv("_");

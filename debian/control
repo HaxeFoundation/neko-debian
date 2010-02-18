@@ -2,15 +2,15 @@ Source: neko
 Section: interpreters
 Priority: optional
 Maintainer: Jens Peter Secher <jps@debian.org>
-Standards-Version: 3.8.3
-Build-Depends: debhelper (>= 6), quilt, pkg-config, libgc-dev, apache2-threaded-dev, libmysqlclient-dev, libsqlite3-dev, libpcre3-dev, libapr1-dev, libgtk2.0-dev
-Vcs-Hg: http://hg.debian.org/hg/collab-maint/neko/neko
+Standards-Version: 3.8.4
+Build-Depends: debhelper (>= 7), quilt, pkg-config, libgc-dev, apache2-threaded-dev, libmysqlclient-dev, libsqlite3-dev, libpcre3-dev, libapr1-dev, libgtk2.0-dev
+Vcs-Hg: http://hg.debian.org/hg/collab-maint/neko
 Homepage: http://nekovm.org
 
 Package: libneko0
 Architecture: any
 Section: libs
-Depends: ${shlibs:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}
 Conflicts: neko (<< 1.8.0-2), neko-dev (<< 1.8.1)
 Description: Lightweight virtual machine - shared library
  Neko provides a common runtime for several different languages,
@@ -23,9 +23,9 @@ Description: Lightweight virtual machine - shared library
 Package: neko-dev
 Architecture: all
 Section: libdevel
-Depends: libneko0 (>= ${source:Version})
+Depends: libneko0 (>= ${source:Upstream-Version}), libneko0 (<<  ${source:Upstream-Version}+1~), ${misc:Depends}
 Conflicts: neko (<< 1.8.0-2)
-Description: Lightweight virtual machine - development
+Description: Lightweight virtual machine - headers
  Neko provides a common runtime for several different languages,
  including JavaScript and haXe.
  .
@@ -40,7 +40,7 @@ Description: Lightweight virtual machine - development
 
 Package: neko
 Architecture: any
-Depends: ${shlibs:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}
 Suggests: libapache2-mod-neko, neko-dev
 Description: Lightweight virtual machine - compiler and tools
  Neko provides a common runtime for several different languages,
@@ -57,7 +57,7 @@ Description: Lightweight virtual machine - compiler and tools
 Package: libapache2-mod-neko
 Architecture: all
 Section: httpd
-Depends: neko (>= ${source:Version}), apache2-mpm-prefork
+Depends: neko (>= ${source:Version}), ${misc:Depends}, apache2-mpm-prefork
 Description: Apache module for running server-side Neko programs
  Neko provides a common runtime for several different languages,
  including JavaScript and haXe.
