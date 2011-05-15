@@ -1,8 +1,17 @@
+neko (1.8.1-6) unstable; urgency=low
+
+  * Include patch to fix compile errors on hurd-i386, thanks to Pino
+    Toscano.
+    (Closes: #626260)
+
+ -- Jens Peter Secher <jps@debian.org>  Sun, 15 May 2011 18:44:31 +0200
+
 neko (1.8.1-5) unstable; urgency=low
 
-  * Attempt to avoid spurious build failures (stack overflows and
-    segmentation faults) by using both -fno-strict-aliasing and lower
-    optimisation level.
+  * Avoid spurious build failures (stack overflows and segmentation
+    faults) by using both -fno-strict-aliasing and lower optimisation
+    level.
+    (Closes: #569806)
 
  -- Jens Peter Secher <jps@debian.org>  Thu, 18 Feb 2010 22:26:27 +0100
 

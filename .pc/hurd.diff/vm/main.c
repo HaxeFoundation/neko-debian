@@ -74,7 +74,7 @@ static char *executable_path() {
 	}
 	path[length] = '\0';
 	return path;
-#elif defined(NEKO_LINUX)
+#else
 	static char path[1024];
 	int length = readlink("/proc/self/exe", path, sizeof(path));
 	if( length < 0 || length >= 1024 ) {
@@ -85,8 +85,6 @@ static char *executable_path() {
 	}
 	path[length] = '\0';
 	return path;
-#else
-	return getenv("_");
 #endif
 }
 

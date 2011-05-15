@@ -22,7 +22,7 @@
 #	define NEKO_WINDOWS
 #endif
 
-#if defined(__APPLE__) || defined(macintosh)
+#if defined(__APPLE__) || defined(__MACH__) || defined(macintosh)
 #	define NEKO_MAC
 #endif
 
@@ -36,10 +36,6 @@
 
 #if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
 #	define NEKO_BSD
-#endif
-
-#if defined(__GNU__)
-#	define NEKO_HURD
 #endif
 
 // COMPILER/PROCESSOR FLAGS
@@ -67,7 +63,7 @@
 #	define NEKO_64BITS
 #endif
 
-#if defined(NEKO_LINUX) || defined(NEKO_MAC) || defined(NEKO_BSD) || defined(NEKO_GNUKBSD) || defined(NEKO_HURD)
+#if defined(NEKO_LINUX) || defined(NEKO_MAC) || defined(NEKO_BSD) || defined(NEKO_GNUKBSD)
 #	define NEKO_POSIX
 #endif
 
