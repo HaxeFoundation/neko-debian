@@ -253,9 +253,9 @@ link = function(files,target,params1,params2) {
 		dir[0] + ".o"
 	}));
 	var opt = linkoptions;
-	var cmd = linkcmd+" "+make("-L",libraries);
+	var cmd = linkcmd+" "+opt+" "+make("-L",libraries);
 	var out = " -o ../../bin/"+target+".ndll ";
-	exec(cmd+out+files+params1+params2+" "+opt);
+	exec(cmd+out+params1+files+params2);
 }
 
 // COMPILATION
