@@ -5,4 +5,4 @@ mysql-missing-include.diff
 kfreebsd-compile-fix.diff
 kfreebsd-executable-path.diff
 hurd.diff
-debian-changes-1.8.1-6ubuntu1
+ld-as-needed.diff
