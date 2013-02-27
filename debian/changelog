@@ -1,3 +1,9 @@
+neko (1.8.1-6ubuntu4) raring; urgency=low
+
+  * Rebuild to pick up the new libgc1c3 dependency.
+
+ -- Matthias Klose <doko@ubuntu.com>  Wed, 27 Feb 2013 13:39:51 +0000
+
 neko (1.8.1-6ubuntu3) quantal; urgency=low
 
   * Rebuild to correct the compile-time-selected linker path on armhf.
