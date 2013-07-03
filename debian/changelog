@@ -1,3 +1,9 @@
+neko (1.8.1-6ubuntu5) saucy; urgency=low
+
+  * Rebuild to pick up new libgc package name
+
+ -- Matthias Klose <doko@ubuntu.com>  Wed, 03 Jul 2013 12:04:17 +0000
+
 neko (1.8.1-6ubuntu4) raring; urgency=low
 
   * Rebuild to pick up the new libgc1c3 dependency.
