@@ -1,19 +1,24 @@
-/* ************************************************************************ */
-/*																			*/
-/*  Neko Virtual Machine													*/
-/*  Copyright (c)2005 Motion-Twin											*/
-/*																			*/
-/* This library is free software; you can redistribute it and/or			*/
-/* modify it under the terms of the GNU Lesser General Public				*/
-/* License as published by the Free Software Foundation; either				*/
-/* version 2.1 of the License, or (at your option) any later version.		*/
-/*																			*/
-/* This library is distributed in the hope that it will be useful,			*/
-/* but WITHOUT ANY WARRANTY; without even the implied warranty of			*/
-/* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU		*/
-/* Lesser General Public License or the LICENSE file for more details.		*/
-/*																			*/
-/* ************************************************************************ */
+/*
+ * Copyright (C)2005-2012 Haxe Foundation
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
@@ -26,14 +31,10 @@
 #	define setjmp _setjmp
 #endif
 
-#ifdef NEKO_VCC
-	long _ftol( double f );
-	long _ftol2( double f) { return _ftol(f); };
-#endif
-
 extern value *neko_builtins;
 
 DEFINE_KIND(neko_k_kind);
+DEFINE_KIND(k_old_int32);
 
 /**
 	<doc>
@@ -121,7 +122,7 @@ static value builtin_asub( value a, value p, value l ) {
 }
 
 /**
-	$ablit : dst:array -> dst_pos:int -> src:array -> src_pos:int -> len:int -> array
+	$ablit : dst:array -> dst_pos:int -> src:array -> src_pos:int -> len:int -> void
 	<doc>
 	Copy [len] elements from [src_pos] of [src] to [dst_pos] of [dst].
 	An error occurs if out of arrays bounds.
@@ -140,7 +141,7 @@ static value builtin_ablit( value dst, value dp, value src, value sp, value l ) 
 	if( dpp < 0 || spp < 0 || ll < 0 || dpp + ll < 0 || spp + ll  < 0 || dpp + ll > val_array_size(dst) || spp + ll > val_array_size(src) )
 		neko_error();
 	memmove(val_array_ptr(dst)+dpp,val_array_ptr(src)+spp,ll * sizeof(value));
-	return val_true;
+	return val_null;
 }
 
 /**
@@ -288,11 +289,11 @@ static value builtin_sblit( value dst, value dp, value src, value sp, value l ) 
 	if( dpp < 0 || spp < 0 || ll < 0 || dpp + ll < 0 || spp + ll  < 0 || dpp + ll > val_strlen(dst) || spp + ll > val_strlen(src) )
 		neko_error();
 	memmove(val_string(dst)+dpp,val_string(src)+spp,ll);
-	return val_true;
+	return val_null;
 }
 
 /**
-	$sfind : src:string -> pos:int -> pat:string -> int
+	$sfind : src:string -> pos:int -> pat:string -> int?
 	<doc>
 	Return the first position starting at [pos] in [src] where [pat] was found.
 	Return null if not found. Error if [pos] is outside [src] bounds.
@@ -415,6 +416,23 @@ static value builtin_hash( value f ) {
 }
 
 /**
+	$fasthash : string -> int
+	<doc>Return the hashed value of a field name, without accessing the cache</doc>
+**/
+static value builtin_fasthash( value f ) {
+	value acc = alloc_int(0);
+	unsigned char *name;
+	val_check(f,string);
+	name = (unsigned char *)val_string(f);
+	while( *name ) {
+		acc = alloc_int(223 * val_int(acc) + *name);
+		name++;
+	}
+	return acc;
+}
+
+
+/**
 	$field : int -> string
 	<doc>Reverse the hashed value of a field name. Return [null] on failure</doc>
 **/
@@ -435,7 +453,7 @@ static value builtin_objsetproto( value o, value p ) {
 		val_check(p,object);
 		((vobject*)o)->proto = (vobject*)p;
 	}
-	return val_true;
+	return val_null;
 }
 
 /**
@@ -506,7 +524,7 @@ static value closure_callback( value *args, int nargs ) {
 }
 
 /**
-	$closure : function -> any* -> function
+	$closure : function -> object -> any* -> function
 	<doc>Build a closure by applying a given number of arguments to a function</doc>
 **/
 static value builtin_closure( value *args, int nargs ) {
@@ -593,7 +611,7 @@ static value builtin_varargs( value f ) {
 	<doc>Add two integers</doc>
 **/
 static value builtin_iadd( value a, value b ) {
-	return alloc_int( val_int(a) + val_int(b) );
+	return alloc_best_int( val_any_int(a) + val_any_int(b) );
 }
 
 /**
@@ -601,7 +619,7 @@ static value builtin_iadd( value a, value b ) {
 	<doc>Subtract two integers</doc>
 **/
 static value builtin_isub( value a, value b ) {
-	return alloc_int( val_int(a) - val_int(b) );
+	return alloc_best_int( val_any_int(a) - val_any_int(b) );
 }
 
 /**
@@ -609,7 +627,7 @@ static value builtin_isub( value a, value b ) {
 	<doc>Multiply two integers</doc>
 **/
 static value builtin_imult( value a, value b ) {
-	return alloc_int( val_int(a) * val_int(b) );
+	return alloc_best_int( val_any_int(a) * val_any_int(b) );
 }
 
 /**
@@ -617,9 +635,9 @@ static value builtin_imult( value a, value b ) {
 	<doc>Divide two integers. An error occurs if division by 0</doc>
 **/
 static value builtin_idiv( value a, value b ) {
-	if( b == (value)1 )
+	if( val_any_int(b) == 0 )
 		neko_error();
-	return alloc_int( val_int(a) / val_int(b) );
+	return alloc_best_int( val_any_int(a) / val_any_int(b) );
 }
 
 typedef union {
@@ -672,16 +690,17 @@ static value builtin_int( value f ) {
 	switch( val_type(f) ) {
 	case VAL_FLOAT:
 #ifdef	NEKO_WINDOWS
-		return alloc_int((int)val_float(f));
+		return alloc_best_int((int)val_float(f));
 #else
 		// in case of overflow, the result is unspecified by ISO
 		// so we have to make a module 2^32 before casting to int
 		return alloc_int((unsigned int)fmod(val_float(f),4294967296.0));
 #endif
 	case VAL_STRING: {
-		char *c = val_string(f);
-		if( val_strlen(f) >= 2 && c[0] == '0' && c[1] == 'x' ) {
-			int h = 0;
+		char *c = val_string(f), *end;
+		int h;
+		if( val_strlen(f) >= 2 && c[0] == '0' && (c[1] == 'x' || c[1] == 'X') ) {
+			h = 0;
 			c += 2;
 			while( *c ) {
 				char k = *c++;
@@ -692,13 +711,15 @@ static value builtin_int( value f ) {
 				else if( k >= 'a' && k <= 'f' )
 					h = (h << 4) | ((k - 'a') + 10);
 				else
-					return alloc_int(0);
+					return val_null;
 			}
-			return alloc_int(h);
+			return alloc_best_int(h);
 		}
-		return alloc_int( atoi(val_string(f)) );
+		h = strtol(c,&end,10);
+		return ( c == end ) ? val_null : alloc_best_int(h);
 		}
 	case VAL_INT:
+	case VAL_INT32:
 		return f;
 	}
 	return val_null;
@@ -709,8 +730,11 @@ static value builtin_int( value f ) {
 	<doc>Convert the value to the corresponding float or return [null]</doc>
 **/
 static value builtin_float( value f ) {
-	if( val_is_string(f) )
-		return alloc_float( atof(val_string(f)) );
+	if( val_is_string(f) ) {
+		char *c = val_string(f), *end;
+		tfloat f = (tfloat)strtod(c,&end);
+		return (c == end) ? val_null : alloc_float(f);
+	}
 	if( val_is_number(f) )
 		return alloc_float( val_number(f) );
 	return val_null;
@@ -723,6 +747,8 @@ static value builtin_float( value f ) {
 	<doc>Returns the kind value of the abstract</doc>
 **/
 static value builtin_getkind( value v ) {
+	if( val_is_int32(v) )
+		return alloc_abstract(neko_k_kind,k_old_int32);
 	val_check(v,abstract);
 	return alloc_abstract(neko_k_kind,val_kind(v));
 }
@@ -733,7 +759,7 @@ static value builtin_getkind( value v ) {
 **/
 static value builtin_iskind( value v, value k ) {
 	val_check_kind(k,neko_k_kind);
-	return val_is_abstract(v) ? alloc_bool(val_kind(v) == (vkind)val_data(k)) : val_false;
+	return val_is_abstract(v) ? alloc_bool(val_kind(v) == (vkind)val_data(k)) : (val_data(k) == k_old_int32 ? alloc_bool(val_is_int32(v)) : val_false);
 }
 
 /** <doc><h2>Hashtable Builtins</h2></doc> **/
@@ -798,7 +824,7 @@ static value builtin_hresize( value vh, value size ) {
 		add_rec(cc,nsize,h->cells[i]);
 	h->cells = cc;
 	h->ncells = nsize;
-	return val_true;
+	return val_null;
 }
 
 /**
@@ -985,7 +1011,7 @@ static value builtin_hadd( value vh, value key, value val ) {
 	c->next = h->cells[hkey];
 	h->cells[hkey] = c;
 	h->nitems++;
-	return val_true;
+	return val_null;
 }
 
 /**
@@ -1070,7 +1096,7 @@ static value builtin_rethrow( value v ) {
 	<doc>Return true if [v] is not [false], not [null] and not 0</doc>
 **/
 static value builtin_istrue( value f ) {
-	return alloc_bool(f != val_false && f != val_null && f != alloc_int(0));
+	return alloc_bool(f != val_false && f != val_null && f != alloc_int(0) && (val_is_int(f) || val_tag(f) != VAL_INT32 || val_int32(f) != 0));
 }
 
 /**
@@ -1078,7 +1104,7 @@ static value builtin_istrue( value f ) {
 	<doc>Return true if [v] is [false] or [null] or [0]</doc>
 **/
 static value builtin_not( value f ) {
-	return alloc_bool(f == val_false || f == val_null || f == alloc_int(0));
+	return alloc_bool(f == val_false || f == val_null || f == alloc_int(0) || (!val_is_int(f) && val_tag(f) == VAL_INT32 && val_int32(f) == 0));
 }
 
 /**
@@ -1101,6 +1127,7 @@ static value builtin_not( value f ) {
 static value builtin_typeof( value v ) {
 	switch( val_type(v) ) {
 	case VAL_INT:
+	case VAL_INT32:
 		return alloc_int(1);
 	case VAL_NULL:
 		return alloc_int(0);
@@ -1229,6 +1256,7 @@ void neko_init_builtins() {
 	BUILTIN(objremove,2);
 	BUILTIN(objfields,1);
 	BUILTIN(hash,1);
+	BUILTIN(fasthash,1);
 	BUILTIN(field,1);
 	BUILTIN(objsetproto,2);
 	BUILTIN(objgetproto,1);

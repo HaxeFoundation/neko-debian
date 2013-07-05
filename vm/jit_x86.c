@@ -1,19 +1,24 @@
-/* ************************************************************************ */
-/*																			*/
-/*  Neko Virtual Machine													*/
-/*  Copyright (c)2005 Motion-Twin											*/
-/*																			*/
-/* This library is free software; you can redistribute it and/or			*/
-/* modify it under the terms of the GNU Lesser General Public				*/
-/* License as published by the Free Software Foundation; either				*/
-/* version 2.1 of the License, or (at your option) any later version.		*/
-/*																			*/
-/* This library is distributed in the hope that it will be useful,			*/
-/* but WITHOUT ANY WARRANTY; without even the implied warranty of			*/
-/* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU		*/
-/* Lesser General Public License or the LICENSE file for more details.		*/
-/*																			*/
-/* ************************************************************************ */
+/*
+ * Copyright (C)2005-2012 Haxe Foundation
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
 #include "vm.h"
 #include "neko_mod.h"
 #include "objtable.h"
@@ -43,6 +48,8 @@
 #define	STACK_ALIGN
 #define STACK_ALIGN_DEBUG
 #endif
+
+#define TAG_MASK		((1<<TAG_BITS)-1)
 
 //#define JIT_DEBUG
 
@@ -132,6 +139,7 @@ enum IOperation {
 	IOP_AND,
 	IOP_OR,
 	IOP_XOR,
+	IOP_LAST
 };
 
 #define Eax 0
@@ -169,6 +177,8 @@ enum IOperation {
 #define JSignGte	0x8D
 #define JSignLte	0x8E
 #define JSignGt		0x8F
+#define JOverflow	0x80
+#define JCarry		0x82
 
 #define ERROR	{ tmp_free(ctx->pos); tmp_free(ctx->baseptr); failure("JIT error"); }
 #define CONST(v)				((int)(int_val)(v))
@@ -526,9 +536,6 @@ typedef struct {
 	char *call_tail_fun[NARGS];
 	char *make_env[MAX_ENV];
 	char *make_env_n;
-	char *add;
-	char *oop[OP_LAST];
-	char *oop_r[OP_LAST];
 	char *oo_get;
 	char *oo_set;
 	char *handle_trap;
@@ -548,21 +555,10 @@ static const char *cstrings[] = {
 	"Invalid array access", // 4
 	"Invalid field access", // 5
 	"Invalid environment", // 6
-	"+", // 7
-	"-", // 8
-	"*", // 9
-	"/", // 10
-	"%", // 11
-	"<<", // 12
-	">>", // 13
-	">>>", // 14
-	"&", // 15
-	"|", // 16
-	"^", // 17
-	"$apply", // 18
-	"Invalid End Trap", // 19
-	"$hash", // 20
-	"Unsupported operation", // 21
+	"Invalid operation (%)", // 7
+	"$apply", // 8
+	"Invalid End Trap", // 9
+	"$hash", // 10
 };
 
 #define DEFINE_PROC(p,arg) ctx->buf = buf; jit_##p(ctx,arg); buf = ctx->buf
@@ -572,6 +568,7 @@ static const char *cstrings[] = {
 #define number_op(arg)	DEFINE_PROC(number_op,arg)
 #define array_access(p)	DEFINE_PROC(array_access,p)
 #define int_op(arg)		DEFINE_PROC(int_op,arg)
+#define best_int()		DEFINE_PROC(best_int,0)
 
 #ifdef STACK_ALIGN_DEBUG
 #include <stdlib.h>
@@ -645,6 +642,23 @@ static void jit_push_infos( jit_ctx *ctx, enum PushInfosMode callb ) {
 		get_var_p(CSP,FIELD(-1),VThis);
 		get_var_p(CSP,FIELD(0),VModule)
 	}
+	END_BUFFER;
+}
+
+static void jit_best_int( jit_ctx *ctx, int _ ) {
+	int *wrap;
+	char *jend;
+	INIT_BUFFER;
+	XMov_rr(TMP,ACC);
+	XShl_rc(ACC,1);
+	XJump(JOverflow,wrap);
+	XOr_rc(ACC,1);
+	XJump_near(jend);
+	PATCH_JUMP(wrap);
+	XPush_r(TMP);
+	XCall_m(alloc_int32);
+	stack_pop(Esp,1);
+	PATCH_JUMP(jend);
 	END_BUFFER;
 }
 
@@ -1035,150 +1049,292 @@ static void jit_call_fun( jit_ctx *ctx, int nargs, int mode ) {
 #define jit_call_fun_tail(ctx,i)		jit_call_fun(ctx,i,TAIL_CALL)
 #define jit_call_fun_this(ctx,i)		jit_call_fun(ctx,i,THIS_CALL)
 
+// ------------------- INTERP EMULATION
+
+#define STACK_EXPAND if( !neko_stack_expand(vm->sp,vm->csp,vm) ) val_throw(alloc_string("Stack Overflow"))
+
+#define ERASE 0
+
+#define ACC_BACKUP
+#define ACC_RESTORE
+
+#define PushInfos() \
+		if( vm->csp + 4 >= vm->sp ) STACK_EXPAND; \
+		*++vm->csp = (int_val)pc; \
+		*++vm->csp = (int_val)vm->env; \
+		*++vm->csp = (int_val)vm->vthis; \
+		*++vm->csp = (int_val)vm->jit_val;
+
+#define PopInfos(restpc) \
+		vm->jit_val = (void*)*vm->csp; \
+		*vm->csp-- = ERASE; \
+		vm->vthis = (value)*vm->csp; \
+		*vm->csp-- = ERASE; \
+		vm->env = (value)*vm->csp; \
+		*vm->csp-- = ERASE; \
+		if( restpc ) pc = (int)*vm->csp; \
+		*vm->csp-- = ERASE;
+
+#define BeginCall()
+#define EndCall()
+
+#define RuntimeError(err)	{ PushInfos(); BeginCall(); val_throw(alloc_string(err)); }
+
+#define ObjectOpGen(obj,param,id,err) { \
+		value _o = (value)obj; \
+		value _arg = (value)param; \
+		value _f = val_field(_o,id); \
+		if( _f == val_null ) { \
+			err; \
+		} else { \
+			PushInfos(); \
+			BeginCall(); \
+			acc = (int_val)val_callEx(_o,_f,&_arg,1,NULL); \
+			EndCall(); \
+			PopInfos(false); \
+		} \
+	}
+
+#define ObjectOp(obj,param,id) ObjectOpGen(obj,param,id,RuntimeError("Unsupported operation"))
+
+#define OpError(op) RuntimeError("Invalid operation (" op ")")
+
+static int_val generic_add( neko_vm *vm, int_val acc, int_val sp, int pc ) {
+	if( acc & 1 ) {
+		if( val_tag(sp) == VAL_FLOAT )
+			acc = (int_val)alloc_float(val_float(sp) + val_int(acc));
+		else if( val_tag(sp) == VAL_INT32 )
+			acc = (int_val)alloc_best_int(val_int32(sp) + val_int(acc));
+		else if( val_short_tag(sp) == VAL_STRING  )
+			acc = (int_val)neko_append_int(vm,(value)sp,val_int(acc),true);
+		else if( val_tag(sp) == VAL_OBJECT )
+			ObjectOp(sp,acc,id_add)
+		else
+			OpError("+");
+	} else if( sp & 1 ) {
+		if( val_tag(acc) == VAL_FLOAT )
+			acc = (int_val)alloc_float(val_int(sp) + val_float(acc));
+		else if( val_tag(acc) == VAL_INT32 )
+			acc = (int_val)alloc_best_int(val_int(sp) + val_int32(acc));
+		else if( val_short_tag(acc) == VAL_STRING )
+			acc = (int_val)neko_append_int(vm,(value)acc,val_int(sp),false);
+		else if( val_tag(acc) == VAL_OBJECT )
+			ObjectOp(acc,sp,id_radd)
+		else
+			OpError("+");
+	} else if( val_tag(acc) == VAL_FLOAT ) {
+		if( val_tag(sp) == VAL_FLOAT )
+			acc = (int_val)alloc_float(val_float(sp) + val_float(acc));
+		else if( val_tag(sp) == VAL_INT32 )
+			acc = (int_val)alloc_float(val_int32(sp) + val_float(acc));
+		else
+			goto add_next;
+	} else if( val_tag(acc) == VAL_INT32 ) {
+		if( val_tag(sp) == VAL_INT32 )
+			acc = (int_val)alloc_best_int(val_int32(sp) + val_int32(acc));
+		else if( val_tag(sp) == VAL_FLOAT )
+			acc = (int_val)alloc_float(val_float(sp) + val_int32(acc));
+		else
+			goto add_next;
+	} else {
+	add_next:
+		if( val_tag(sp) == VAL_OBJECT )
+			ObjectOpGen(sp,acc,id_add,goto add_2)
+		else {
+			add_2:
+			if( val_tag(acc) == VAL_OBJECT )
+				ObjectOpGen(acc,sp,id_radd,goto add_3)
+			else {
+				add_3:
+				if( val_short_tag(acc) == VAL_STRING || val_short_tag(sp) == VAL_STRING ) {
+					ACC_BACKUP
+					buffer b = alloc_buffer(NULL);
+					BeginCall();
+					val_buffer(b,(value)sp);
+					ACC_RESTORE;
+					val_buffer(b,(value)acc);
+					EndCall();
+					acc = (int_val)buffer_to_string(b);
+				} else
+					OpError("+");
+			}
+		}
+	}
+	return acc;
+}
+
+#define NumberOp(op,fop,id_op,id_rop) \
+		if( acc & 1 ) { \
+			if( val_tag(sp) == VAL_FLOAT ) \
+				acc = (int_val)alloc_float(fop(val_float(sp),val_int(acc))); \
+			else if( val_tag(sp) == VAL_INT32 ) \
+				acc = (int_val)alloc_best_int(val_int32(sp) op val_int(acc)); \
+			else if( val_tag(sp) == VAL_OBJECT ) \
+			    ObjectOp(sp,acc,id_op) \
+			else \
+				OpError(#op); \
+		} else if( sp & 1 ) { \
+			if( val_tag(acc) == VAL_FLOAT ) \
+				acc = (int_val)alloc_float(fop(val_int(sp),val_float(acc))); \
+			else if( val_tag(acc) == VAL_INT32 ) \
+				acc = (int_val)alloc_best_int(val_int(sp) op val_int32(acc)); \
+			else if( val_tag(acc) == VAL_OBJECT ) \
+				ObjectOp(acc,sp,id_rop) \
+			else \
+				OpError(#op); \
+		} else if( val_tag(acc) == VAL_FLOAT ) { \
+			if( val_tag(sp) == VAL_FLOAT ) \
+				acc = (int_val)alloc_float(fop(val_float(sp),val_float(acc))); \
+			else if( val_tag(sp) == VAL_INT32 ) \
+				acc = (int_val)alloc_float(fop(val_int32(sp),val_float(acc))); \
+			else \
+				goto id_op##_next; \
+		} else if( val_tag(acc) == VAL_INT32 ) {\
+			if( val_tag(sp) == VAL_INT32 ) \
+				acc = (int_val)alloc_best_int(val_int32(sp) op val_int32(acc)); \
+			else if( val_tag(sp) == VAL_FLOAT ) \
+				acc = (int_val)alloc_float(fop(val_float(sp),val_int32(acc))); \
+			else \
+				goto id_op##_next; \
+		} else { \
+			id_op##_next: \
+			if( val_tag(sp) == VAL_OBJECT ) \
+				ObjectOpGen(sp,acc,id_op,goto id_op##_next2) \
+			else { \
+				id_op##_next2: \
+				if( val_tag(acc) == VAL_OBJECT ) \
+					ObjectOp(acc,sp,id_rop) \
+				else \
+					OpError(#op); \
+			} \
+		}
+
+#define SUB(x,y) ((x) - (y))
+#define MULT(x,y) ((x) * (y))
+#define DIV(x,y) ((x) / (y))
+
+#define GENERIC_OP(id,op,fop) \
+	static int_val generic_##id( neko_vm *vm, int_val acc, int_val sp, int pc ) { \
+		NumberOp(op,fop,id_##id,id_r##id); \
+		return acc; \
+	}
+
+GENERIC_OP(sub,-,SUB);
+GENERIC_OP(mult,*,MULT);
+
+static int_val generic_div( neko_vm *vm, int_val acc, int_val sp, int pc ) {
+	if( val_is_number(acc) && val_is_number(sp) )
+		acc = (int_val)alloc_float( ((tfloat)val_number(sp)) / val_number(acc) );
+	else if( val_is_object(sp) )
+		ObjectOpGen(sp,acc,id_div,goto div_next)
+	else {
+		div_next:
+		if( val_is_object(acc) )
+			ObjectOp(acc,sp,id_rdiv)
+		else
+			OpError("/");
+	}
+	return acc;
+}
+
+static int_val generic_mod( neko_vm *vm, int_val acc, int_val sp, int pc ) {
+	if( (acc == 1 || (val_is_int32(acc) && val_int32(acc)==0)) && val_is_any_int(sp) )
+		OpError("%");
+	NumberOp(%,fmod,id_mod,id_rmod);
+	return acc;
+}
+
+#define GENERIC_IOP(id,op) \
+	static int_val generic_##id( neko_vm *vm, int_val acc, int_val sp, int pc ) { \
+		if( val_is_any_int(acc) && val_is_any_int(sp) ) \
+			acc = (int_val)alloc_best_int(val_any_int(sp) op val_any_int(acc)); \
+		else \
+			OpError(#op); \
+		return acc; \
+	}
+
+GENERIC_IOP(shl,<<);
+GENERIC_IOP(shr,>>);
+GENERIC_IOP(or,|);
+GENERIC_IOP(and,&);
+GENERIC_IOP(xor,^);
+
+static int_val generic_ushr( neko_vm *vm, int_val acc, int_val sp, int pc ) {
+	if( val_is_any_int(acc) && val_is_any_int(sp) )
+		acc = (int_val)alloc_best_int( ((unsigned int)val_any_int(sp)) >> val_any_int(acc));
+	else
+		OpError(">>>");
+	return acc;
+}
+
+// --------------------------------------------
+
+// we only inline operations for (int,int) and (float,float)
+// other cases are handled by a single generic_op primitive
+// through a small jit_generic_* wrapper
+
 static void jit_number_op( jit_ctx *ctx, enum Operation op ) {
 	INIT_BUFFER;
-	int *jnot_int1, *jnot_int2, *jint, *jnext;
-	int *jerr1, *jerr2, *jerr3, *jerr4, *jerr5;
-	int *jfloat1, *jend;
-	char *jfloat2, *jfloat3;
-#	ifdef STACK_ALIGN_DEBUG
-	int *jend2, *jend3;
-#	else
-	char *jend2, *jend3;
-#	endif
-	int *jmod0 = NULL;
-
-	// acc <=> sp
+	int *jnot_int, *jnot_int2, *jint, *jnot_float1, *jnot_float2, *jmod0;
+	char *jend, *jend2, *jdiv = NULL;
+	// tmp = acc
 	XMov_rr(TMP,ACC);
+	// acc = *sp
 	XMov_rp(ACC,SP,FIELD(0));
-
 	// is_int(acc) && is_int(sp)
-	is_int(ACC,false,jnot_int1);
+	is_int(ACC,false,jnot_int);
 	is_int(TMP,false,jnot_int2);
-
 	XShr_rc(ACC,1);
 	XShr_rc(TMP,1);
-
-	if( op != OP_DIV ) {
-		switch( op ) {
-		case OP_ADD:
-			XAdd_rr(ACC,TMP);
-			break;
-		case OP_SUB:
-			XSub_rr(ACC,TMP);
-			break;
-		case OP_MUL:
-			XIMul_rr(ACC,TMP);
-			break;
-		case OP_MOD:
-			XCmp_rc(TMP,0);
-			XJump(JEq,jmod0);
-			XCdq();
-			XIDiv_r(TMP);
-			XMov_rr(ACC,Edx);
-			break;
-		default:
-			ERROR;
-			break;
-		}
-		XShl_rc(ACC,1);
-		XOr_rc(ACC,1);
-	}
-	XJump(JAlways,jend);
-
-	// is_int(acc) && is_number(sp)
-	PATCH_JUMP(jnot_int2);
-	XMov_rp(TMP2,TMP,FIELD(0));
-	XCmp_rb(TMP2,VAL_FLOAT);
-
-	XJump(JNeq,jerr1);
-	XShr_rc(ACC,1);
-	XPush_r(ACC);
-	XFILd_i(Esp);
-	XAdd_rc(TMP,4);
-	XFLd_i(TMP);
-	stack_pop(Esp,1);
-	XJump(JAlways,jfloat1);
-
-	// is_number(acc) ?
-	PATCH_JUMP(jnot_int1);
-	XMov_rp(TMP2,ACC,FIELD(0));
-	XCmp_rb(TMP2,VAL_FLOAT);
-	XJump(JNeq,jerr2);
-
-	// is_number(acc) && is_number(sp)
-	is_int(TMP,true,jint);
-	XMov_rp(TMP2,TMP,FIELD(0));
-	XCmp_rb(TMP2,VAL_FLOAT);
-	XJump(JNeq,jerr3);
-	XAdd_rc(ACC,4);
-	XFLd_i(ACC);
-	XAdd_rc(TMP,4);
-	XFLd_i(TMP);
-	XJump_near(jfloat2);
-
-	// is_number(acc) && is_int(sp)
-	PATCH_JUMP(jint);
-	XAdd_rc(ACC,4);
-	XFLd_i(ACC);
-	XShr_rc(TMP,1);
-	XPush_r(TMP);
-	XFILd_i(Esp);
-	stack_pop(Esp,1);
-	XJump_near(jfloat3);
-
-	// is_object(acc) ?
-	PATCH_JUMP(jerr2);
-	XCmp_rb(TMP2,VAL_OBJECT);
-	XJump(JNeq,jnext);
-	XPush_c(GET_PC());
-	label(code->oop[op]);
-	stack_pop(Esp,1);
-#	ifdef STACK_ALIGN_DEBUG
-	XJump(JAlways,jend2);
-#	else
-	XJump_near(jend2);
-#	endif
-
-	// is_object(sp) ?
-	PATCH_JUMP(jnext);
-	is_int(TMP,true,jerr4);
-	XMov_rp(TMP2,TMP,FIELD(0));
-	PATCH_JUMP(jerr1);
-	PATCH_JUMP(jerr3);
-	XCmp_rb(TMP2,VAL_OBJECT);
-	XJump(JNeq,jerr5);
-	XPush_c(GET_PC());
-	label(code->oop_r[op]);
-	stack_pop(Esp,1);
-#	ifdef STACK_ALIGN_DEBUG
-	XJump(JAlways,jend3);
-#	else
-	XJump_near(jend3);
-#	endif
-
-	// error
-	if( op == OP_MOD ) {
+	switch( op ) {
+	case OP_ADD:
+		XAdd_rr(ACC,TMP);
+		break;
+	case OP_SUB:
+		XSub_rr(ACC,TMP);
+		break;
+	case OP_MUL:
+		XIMul_rr(ACC,TMP);
+		break;
+	case OP_MOD:
+		XCmp_rc(TMP,0);
+		XJump(JNeq,jmod0);
+		runtime_error(7,false);
 		PATCH_JUMP(jmod0);
-	}
-	PATCH_JUMP(jerr5);
-	PATCH_JUMP(jerr4);
-	runtime_error(7 + op,false);
-
-	// division is always float
-	if( op == OP_DIV ) {
-		PATCH_JUMP(jend);
+		XCdq();
+		XIDiv_r(TMP);
+		XMov_rr(ACC,Edx);
+		break;
+	case OP_DIV:
 		XPush_r(ACC);
 		XFILd_i(Esp);
 		XPush_r(TMP);
 		XFILd_i(Esp);
 		stack_pop(Esp,2);
+		XJump_near(jdiv);
+		break;
+	default:
+		ERROR;
+		break;
 	}
+	best_int();
+	XJump_near(jend);
 
-	// perform operation
-	PATCH_JUMP(jfloat1);
-	PATCH_JUMP(jfloat2);
-	PATCH_JUMP(jfloat3);
+	// is_float(acc) && is_float(sp)
+	PATCH_JUMP(jnot_int);
+	XMov_rp(TMP2,ACC,FIELD(0));
+	XCmp_rb(TMP2,VAL_FLOAT);
+	XJump(JNeq,jnot_float1);
+	is_int(TMP,true,jint);
+	XMov_rp(TMP2,TMP,FIELD(0));
+	XCmp_rb(TMP2,VAL_FLOAT);
+	XJump(JNeq,jnot_float2);
+	
+	// load floats
+	XAdd_rc(ACC,4);
+	XFLd_i(ACC);
+	XAdd_rc(TMP,4);
+	XFLd_i(TMP);
 
 	switch( op ) {
 	case OP_ADD:
@@ -1188,6 +1344,7 @@ static void jit_number_op( jit_ctx *ctx, enum Operation op ) {
 		XFSubp();
 		break;
 	case OP_DIV:
+		PATCH_JUMP(jdiv);
 		XFDivp();
 		break;
 	case OP_MUL:
@@ -1205,17 +1362,52 @@ static void jit_number_op( jit_ctx *ctx, enum Operation op ) {
 		ERROR;
 		break;
 	}
-
 	if( op != OP_MOD ) {
 		stack_push(Esp,2);
-	}
+	}	
 	XFStp_i(Esp);
 	XCall_m(alloc_float);
 	stack_pop(Esp,2);
+	XJump_near(jend2);
 
-	if( op != OP_DIV ) PATCH_JUMP(jend);
+	// else...
+	PATCH_JUMP(jint);
+	PATCH_JUMP(jnot_float1);
+	PATCH_JUMP(jnot_float2);
+	PATCH_JUMP(jnot_int2);
+
+	begin_call();
+	XPush_c(GET_PC());	
+	XPush_r(ACC);
+	XPush_r(TMP);
+	XPush_r(VM);
+	switch( op ) {
+	case OP_ADD:
+		XCall_m(generic_add);
+		break;
+	case OP_SUB:
+		XCall_m(generic_sub);
+		break;
+	case OP_DIV:
+		XCall_m(generic_div);
+		break;
+	case OP_MUL:
+		XCall_m(generic_mult);
+		break;
+	case OP_MOD:
+		XCall_m(generic_mod);
+		break;
+	case OP_GET:
+	case OP_SET:
+	case OP_LAST:
+		// not used here
+		break;
+	}
+	stack_pop(Esp,4);
+	end_call();
+
+	PATCH_JUMP(jend);
 	PATCH_JUMP(jend2);
-	PATCH_JUMP(jend3);
 	pop(1);
 	END_BUFFER;
 }
@@ -1225,12 +1417,11 @@ static void jit_int_op( jit_ctx *ctx, enum IOperation op ) {
 	int *jerr1, *jerr2;
 	char *jend;
 
-	is_int(ACC,false,jerr1);
 	XMov_rr(TMP,ACC);
-	XShr_rc(TMP,1);
 	XMov_rp(ACC,SP,FIELD(0));
-
-	is_int(ACC,false,jerr2);
+	is_int(ACC,false,jerr1);
+	is_int(TMP,false,jerr2);
+	XShr_rc(TMP,1);
 	XShr_rc(ACC,1);
 
 	switch( op ) {
@@ -1256,216 +1447,45 @@ static void jit_int_op( jit_ctx *ctx, enum IOperation op ) {
 		ERROR;
 	}
 
-	XShl_rc(ACC,1);
-	XOr_rc(ACC,1);
+	best_int();
 	XJump_near(jend);
 
 	PATCH_JUMP(jerr1);
 	PATCH_JUMP(jerr2);
-	runtime_error(12 + op,false);
+
+	begin_call();
+	XPush_c(GET_PC());
+	XPush_r(ACC); // acc and tmp are reversed in jit_number_op
+	XPush_r(TMP); //
+	XPush_r(VM);
+	switch( op ) {
+	case IOP_SHL:
+		XCall_m(generic_shl);
+		break;
+	case IOP_SHR:
+		XCall_m(generic_shr);
+		break;
+	case IOP_USHR:
+		XCall_m(generic_ushr);
+		break;
+	case IOP_AND:
+		XCall_m(generic_and);
+		break;
+	case IOP_OR:
+		XCall_m(generic_or);
+		break;
+	case IOP_XOR:
+		XCall_m(generic_xor);
+		break;
+	case IOP_LAST:
+		// nothing
+		break;
+	}
+	stack_pop(Esp,4);
+	end_call();
+	
 	PATCH_JUMP(jend);
 	pop(1);
-
-	END_BUFFER;
-}
-
-#define END_COUNTER 5
-#define END()		if( nends >= END_COUNTER ) ERROR; XJump(JAlways,jends[nends]); nends++
-
-static void jit_add( jit_ctx *ctx, int _ ) {
-	INIT_BUFFER;
-	int nends = 0;
-	int *jends[END_COUNTER];
-	int *jnot_int, *jnext, *jsp_object1, *jnot_float, *jbadd1, *jnot_string, *jappint1, *jsp_object2;
-	int *joop1, *jnot_object, *joop2, *jerr1, *jbadd3, *jerr2;
-	int *jalloc1, *jalloc2, *jalloc3, *jbadd2;
-
-	// is_int(acc) && is_int(sp)
-	is_int(ACC,false,jnot_int);
-
-	// ! we are sure that sp is not an integer !
-
-	// is_int(acc) && is_float(sp) -> push(val_int(acc)+val_float(sp))
-	XMov_rp(TMP2,TMP,FIELD(0));
-	XCmp_rb(TMP2,VAL_FLOAT);
-	XJump(JNeq,jnext);
-	XAdd_rc(TMP,4);
-	XFLd_i(TMP);
-	stack_push(Esp,1);
-	XShr_rc(ACC,1);
-	XPush_r(ACC);
-	XFILd_i(Esp);
-	XFAddp();
-	XFStp_i(Esp);
-	XJump(JAlways,jalloc1);
-
-	// is_int(acc) && is_string(sp) -> prepare args for append_int(vm,sp,val_int(acc),true)
-	PATCH_JUMP(jnext);
-	XAnd_rc(TMP2,7);
-	XCmp_rb(TMP2,VAL_STRING);
-	XJump(JNeq,jsp_object1);
-	stack_pad(3);
-	XPush_c(1);
-	XShr_rc(ACC,1);
-	XPush_r(ACC);
-	XPush_r(TMP);;
-	XPush_r(VM);
-	XJump(JAlways,jappint1);
-
-	// is_float(acc)
-	PATCH_JUMP(jnot_int);
-	XMov_rp(TMP2,ACC,FIELD(0));
-	XCmp_rb(TMP2,VAL_FLOAT);
-	XJump(JNeq,jnot_float);
-
-	// is_float(acc) && is_int(sp) -> push(val_float(acc)+val_int(sp))
-	is_int(TMP,false,jnext);
-	stack_push(Esp,1);
-	XShr_rc(TMP,1);
-	XPush_r(TMP);
-	XFILd_i(Esp);
-	XAdd_rc(ACC,4);
-	XFLd_i(ACC);
-	XFAddp();
-	XFStp_i(Esp);
-	XJump(JAlways,jalloc2);
-
-	// is_float(acc) && is_float(sp) -> push(val_float(acc)+val_float(sp))
-	PATCH_JUMP(jnext);
-	XMov_rp(TMP2,TMP,FIELD(0));
-	XCmp_rb(TMP2,VAL_FLOAT);
-	XJump(JNeq,jnext);
-	stack_push(Esp,2);
-	XAdd_rc(TMP,4);
-	XFLd_i(TMP);
-	XAdd_rc(ACC,4);
-	XFLd_i(ACC);
-	XFAddp();
-	XFStp_i(Esp);
-	XJump(JAlways,jalloc3);
-
-	// is_float(acc) && is_string(sp) -> BUFADD
-	PATCH_JUMP(jnext);
-	XAnd_rc(TMP2,7);
-	XCmp_rb(TMP2,VAL_STRING);
-	XJump(JEq,jbadd1);
-	XJump(JAlways,jsp_object2);
-
-	// is_string(acc)
-	PATCH_JUMP(jnot_float);
-	XAnd_rc(TMP2,7);
-	XCmp_rb(TMP2,VAL_STRING);
-	XJump(JNeq,jnot_string);
-
-	// is_string(acc) && is_int(sp) -> prepare args for append_int(vm,acc,val_int(sp),false)
-	is_int(TMP,false,jnext);
-	stack_pad(3);
-	XPush_c(0);
-	XShr_rc(TMP,1);
-	XPush_r(TMP);
-	XPush_r(ACC);
-	XPush_r(VM);
-	// call append_int
-	PATCH_JUMP(jappint1);
-	XCall_m(neko_append_int);
-	stack_pop_pad(4,3);
-	END();
-
-	// is_string(acc) && is_string(sp) -> append_strings(sp,acc)
-	PATCH_JUMP(jnext);
-	XMov_rp(TMP2,TMP,FIELD(0));
-	XAnd_rc(TMP2,7);
-	XCmp_rb(TMP2,VAL_STRING);
-	XJump(JNeq,jnext);
-	stack_pad(1);
-	XPush_r(ACC);
-	XPush_r(TMP);
-	XCall_m(neko_append_strings);
-	stack_pop_pad(2,1);
-	END();
-
-	// is_string(acc) && is_object(sp) -> object op (else buffer)
-	PATCH_JUMP(jnext);
-	XCmp_rb(TMP2,VAL_OBJECT);
-	XJump(JEq,joop1);
-	XJump(JAlways,jbadd2);
-
-	// is_object(acc)
-	PATCH_JUMP(jnot_string);
-	XCmp_rb(TMP2,VAL_OBJECT);
-	XJump(JNeq,jnot_object);
-
-	// is_object(acc) && is_object(sp) -> object op (else object rop)
-	is_int(TMP,true,jnext);
-	XMov_rp(TMP2,TMP,FIELD(0));
-	XCmp_rb(TMP2,VAL_OBJECT);
-	XJump(JEq,joop2);
-	PATCH_JUMP(jnext);
-	XMov_rp(TMP2,Esp,FIELD(1+PAD_OPT(2)));
-	XPush_r(TMP2);
-	label(code->oop_r[OP_ADD]);
-	stack_pop(Esp,1);
-	END();
-
-	// is_other(acc) && !is_int(sp) && is_string(sp) -> BUF
-	PATCH_JUMP(jnot_object);
-	is_int(TMP,true,jerr1);
-	XMov_rp(TMP2,TMP,FIELD(0));
-	XAnd_rc(TMP2,7);
-	XCmp_rb(TMP2,VAL_STRING);
-	XJump(JEq,jbadd3);
-
-	// is_other(acc) && is_object(sp) -> OOP else Error
-	PATCH_JUMP(jsp_object1);
-	PATCH_JUMP(jsp_object2);
-	XCmp_rb(TMP2,VAL_OBJECT);
-	XJump(JNeq,jerr2);
-	// object op
-	PATCH_JUMP(joop1);
-	PATCH_JUMP(joop2);
-	XMov_rp(TMP2,Esp,FIELD(1+PAD_OPT(2)));
-	XPush_r(TMP2);
-	label(code->oop[OP_ADD]);
-	stack_pop(Esp,1);
-	END();
-
-	// errors
-	PATCH_JUMP(jerr1);
-	PATCH_JUMP(jerr2);
-	runtime_error(7,true); // "+"
-
-	// append using buffer
-	PATCH_JUMP(jbadd1);
-	PATCH_JUMP(jbadd2);
-	PATCH_JUMP(jbadd3);
-	XPush_r(ACC);
-	XPush_r(TMP);
-	// alloc_buffer(NULL)
-	XPush_c(0);
-	XCall_m(alloc_buffer);
-	XMov_pr(Esp,FIELD(0),ACC);
-	begin_call();
-	XCall_m(val_buffer);
-	XMov_rp(TMP,Esp,FIELD(2));
-	XMov_pr(Esp,FIELD(1),TMP);
-	XCall_m(val_buffer);
-	end_call();
-	XCall_m(buffer_to_string);
-	stack_pop(Esp,3);
-	END();
-
-	// call alloc_float
-	PATCH_JUMP(jalloc1);
-	PATCH_JUMP(jalloc2);
-	PATCH_JUMP(jalloc3);
-	XCall_m(alloc_float);
-	stack_pop(Esp,2);
-
-	// end
-	while( nends-- > 0 ) {
-		PATCH_JUMP(jends[nends]);
-	}
-	XRet();
 
 	END_BUFFER;
 }
@@ -1479,12 +1499,12 @@ static void jit_array_access( jit_ctx *ctx, int n ) {
 	is_int(ACC,true,jerr1);
 	XMov_rp(TMP,ACC,0);
 	XMov_rr(TMP2,TMP);
-	XAnd_rc(TMP2,7);
+	XAnd_rc(TMP2,TAG_MASK);
 	XCmp_rb(TMP2,VAL_ARRAY);
 
 	XJump(JNeq,jnot_array);
 	if( n > 0 ) {
-		XUShr_rc(TMP,3);
+		XUShr_rc(TMP,TAG_BITS);
 		XCmp_rc(TMP,n);
 		XJump(JLte,jbounds);
 	}
@@ -1643,7 +1663,7 @@ static void jit_object_op_gen( jit_ctx *ctx, enum Operation op, int right ) {
 	XCmp_rc(ACC,CONST(val_null));
 	XJump(JNeq,next);
 	stack_pop(Esp,(op == OP_SET)?7:6);
-	runtime_error(21,true); // Unsupported operation
+	runtime_error(11,true); // Unsupported operation
 	PATCH_JUMP(next);
 	XPop_r(TMP);
 	stack_pop(Esp,1);
@@ -1655,14 +1675,6 @@ static void jit_object_op_gen( jit_ctx *ctx, enum Operation op, int right ) {
 	stack_pop(Esp,(op == OP_SET)?7:6);
 	XRet();
 	END_BUFFER;
-}
-
-static void jit_object_op( jit_ctx *ctx, enum Operation op ) {
-	jit_object_op_gen(ctx,op,false);
-}
-
-static void jit_object_op_r( jit_ctx *ctx, enum Operation op ) {
-	jit_object_op_gen(ctx,op,true);
 }
 
 static void jit_object_get( jit_ctx *ctx, int _ ) {
@@ -1693,6 +1705,11 @@ static void jit_opcode( jit_ctx *ctx, enum OPCODE op, int p ) {
 	case AccInt:
 		XMov_rc(ACC,CONST(p));
 		break;
+	case AccInt32:
+		XPush_c(p);
+		XCall_m(alloc_int32);
+		stack_pop(Esp,1);
+		break;
 	case AccStack:
 		XMov_rp(ACC,SP,FIELD(p));
 		break;
@@ -1711,22 +1728,22 @@ static void jit_opcode( jit_ctx *ctx, enum OPCODE op, int p ) {
 	case AccEnv:
 		get_var_r(TMP,VEnv);
 		XMov_rp(TMP2,TMP,FIELD(0));
-		XCmp_rc(TMP2,(p << 3) | VAL_ARRAY);
+		XCmp_rc(TMP2,(p << TAG_BITS) | VAL_ARRAY);
 		XJump(JGt,jok);
 		runtime_error(1,false); // Reading Outside Env
 		PATCH_JUMP(jok);
 		XMov_rp(ACC,TMP,FIELD(p + 1)); // acc = val_array_ptr(env)[p]
 		break;
 	case AccArray: {
-		int *jerr1, *jerr2, *jerr3, *jnot_array, *jbounds;
-		char *jend1, *jend2, *jend3;
+		int *jerr1, *jerr2, *jerr3, *jerr4, *jnot_array, *jbounds;
+		char *jend1, *jend2, *jend3, *jend4;
 
 		// check array & int
 		XMov_rp(TMP,SP,FIELD(0));
 		pop(1);
 		is_int(TMP,true,jerr1);
 		XMov_rp(TMP2,TMP,FIELD(0));
-		XAnd_rc(TMP2,7);
+		XAnd_rc(TMP2,TAG_MASK);
 		XCmp_rb(TMP2,VAL_ARRAY);
 		XJump(JNeq,jnot_array);
 		is_int(ACC,false,jerr2);
@@ -1734,7 +1751,7 @@ static void jit_opcode( jit_ctx *ctx, enum OPCODE op, int p ) {
 		// check bounds & access array
 		XShr_rc(ACC,1);
 		XMov_rp(TMP2,TMP,FIELD(0));
-		XUShr_rc(TMP2,3);
+		XUShr_rc(TMP2,TAG_BITS);
 		XCmp_rr(ACC,TMP2);
 		XJump(JGte,jbounds);
 		XAdd_rc(ACC,1);			  // acc = val_array_ptr(tmp)[acc]
@@ -1755,13 +1772,22 @@ static void jit_opcode( jit_ctx *ctx, enum OPCODE op, int p ) {
 		stack_pop(Esp,1);
 		XJump_near(jend3);
 
-		PATCH_JUMP(jerr1);
+		// check int32 index (with array)
 		PATCH_JUMP(jerr2);
+		XMov_rp(TMP2,ACC,FIELD(0));
+		XCmp_rb(TMP2,VAL_INT32);
+		XJump(JNeq,jerr4);
+		XMov_rc(ACC,CONST(val_null));
+		XJump_near(jend4);
+
+		PATCH_JUMP(jerr1);
 		PATCH_JUMP(jerr3);
+		PATCH_JUMP(jerr4);
 		runtime_error(4,false); // Invalid array access
 		PATCH_JUMP(jend1);
 		PATCH_JUMP(jend2);
 		PATCH_JUMP(jend3);
+		PATCH_JUMP(jend4);
 		break;
 		}
 	case AccIndex:
@@ -1842,7 +1868,7 @@ static void jit_opcode( jit_ctx *ctx, enum OPCODE op, int p ) {
 	case SetEnv:
 		get_var_r(TMP,VEnv);
 		XMov_rp(TMP2,TMP,FIELD(0));
-		XCmp_rc(TMP2,(p << 3) | VAL_ARRAY);
+		XCmp_rc(TMP2,(p << TAG_BITS) | VAL_ARRAY);
 		XJump(JGt,jok);
 		runtime_error(2,false); // Writing Outside Env
 		PATCH_JUMP(jok);
@@ -1880,12 +1906,12 @@ static void jit_opcode( jit_ctx *ctx, enum OPCODE op, int p ) {
 		break;
 		}
 	case SetArray: {
-		int *jerr1, *jerr2, *jerr3, *jnot_array, *jend1;
+		int *jerr1, *jerr2, *jerr3, *jnot_array, *jend1, *jend4;
 		char *jend2, *jend3;
 		XMov_rp(TMP,SP,FIELD(0)); // sp[0] : array/object
 		is_int(TMP,true,jerr1);
 		XMov_rp(TMP2,TMP,FIELD(0));
-		XAnd_rc(TMP2,7);
+		XAnd_rc(TMP2,TAG_MASK);
 		XCmp_rb(TMP2,VAL_ARRAY);
 		XJump(JNeq,jnot_array);
 
@@ -1894,7 +1920,7 @@ static void jit_opcode( jit_ctx *ctx, enum OPCODE op, int p ) {
 
 		XMov_rp(TMP,TMP,FIELD(0)); // tmp = tmp->type
 		XShr_rc(TMP2,1);
-		XUShr_rc(TMP,3);
+		XUShr_rc(TMP,TAG_BITS);
 		XCmp_rr(TMP2,TMP);
 		XJump(JGte,jend1);
 
@@ -1914,14 +1940,20 @@ static void jit_opcode( jit_ctx *ctx, enum OPCODE op, int p ) {
 		stack_pop(Esp,2);
 		XJump_near(jend3);
 
-		PATCH_JUMP(jerr1);
+		// check int32 index (with array)
 		PATCH_JUMP(jerr2);
+		XMov_rp(TMP2,TMP2,FIELD(0));
+		XCmp_rb(TMP2,VAL_INT32);
+		XJump(JEq,jend4);
+
+		PATCH_JUMP(jerr1);
 		PATCH_JUMP(jerr3);
 		runtime_error(4,false);
 
 		PATCH_JUMP(jend1);
 		PATCH_JUMP(jend2);
 		PATCH_JUMP(jend3);
+		PATCH_JUMP(jend4);
 		pop(2);
 		break;
 		}
@@ -1932,12 +1964,12 @@ static void jit_opcode( jit_ctx *ctx, enum OPCODE op, int p ) {
 		pop(1);
 		is_int(TMP,true,jerr1);
 		XMov_rp(TMP2,TMP,FIELD(0));
-		XAnd_rc(TMP2,7);
+		XAnd_rc(TMP2,TAG_MASK);
 		XCmp_rb(TMP2,VAL_ARRAY);
 		XJump(JNeq,jnot_array);
 
 		XMov_rp(TMP2,TMP,FIELD(0));
-		XCmp_rc(TMP2,(p << 3) | VAL_ARRAY); // fake header
+		XCmp_rc(TMP2,(p << TAG_BITS) | VAL_ARRAY); // fake header
 		XJump(JLte,jend1);
 		XMov_pr(TMP,FIELD(p + 1),ACC);
 		XJump_near(jend2);
@@ -2099,51 +2131,9 @@ static void jit_opcode( jit_ctx *ctx, enum OPCODE op, int p ) {
 		}
 		XRet();
 		break;
-	case Add: {
-		int *jnot_int, *jnot_int2, *jint, *jnot_float1, *jnot_float2;
-		char *jend, *jend2;
-		// tmp = sp[0]
-		XMov_rp(TMP,SP,FIELD(0));
-		// is_int(acc) && is_int(sp)
-		is_int(ACC,false,jnot_int);
-		is_int(TMP,false,jnot_int2);
-		XAdd_rr(ACC,TMP);
-		XSub_rc(ACC,1);
-		XJump_near(jend);
-
-		// is_float(acc) && is_float(sp)
-		PATCH_JUMP(jnot_int);
-		XMov_rp(TMP2,ACC,FIELD(0));
-		XCmp_rb(TMP2,VAL_FLOAT);
-		XJump(JNeq,jnot_float1);
-		is_int(TMP,true,jint);
-		XMov_rp(TMP2,TMP,FIELD(0));
-		XCmp_rb(TMP2,VAL_FLOAT);
-		XJump(JNeq,jnot_float2);
-		XAdd_rc(ACC,4);
-		XFLd_i(ACC);
-		XAdd_rc(TMP,4);
-		XFLd_i(TMP);
-		XFAddp();
-		stack_push(Esp,2);
-		XFStp_i(Esp);
-		XCall_m(alloc_float);
-		stack_pop(Esp,2);
-		XJump_near(jend2);
-
-		// else...
-		PATCH_JUMP(jint);
-		PATCH_JUMP(jnot_float1);
-		PATCH_JUMP(jnot_float2);
-		PATCH_JUMP(jnot_int2);
-		XPush_c(GET_PC());
-		label(code->add);
-		stack_pop(Esp,1);
-		PATCH_JUMP(jend);
-		PATCH_JUMP(jend2);
-		pop(1);
+	case Add:
+		number_op(OP_ADD);
 		break;
-		}
 	case Sub:
 		number_op(OP_SUB);
 		break;
@@ -2212,6 +2202,39 @@ static void jit_opcode( jit_ctx *ctx, enum OPCODE op, int p ) {
 			*loop = (int)(start - buf.c);
 		}
 		break;
+	case MakeArray2:
+		stack_pad(3);
+		XPush_r(ACC);
+		XPush_c(p + 1);
+		XCall_m(alloc_array);
+		XMov_rp(TMP,Esp,FIELD(1)); // tmp = saved acc
+		XMov_pr(ACC,FIELD(p+1),TMP); // val_array_ptr(acc)[p] = tmp
+		stack_pop_pad(2,3);
+		if( p < 6 ) {
+			i = 0;
+			while( p > 0 ) {
+				p--;
+				i++;
+				XMov_rp(TMP,SP,FIELD(p));
+				XMov_pr(ACC,FIELD(i),TMP);
+				XMov_pc(SP,FIELD(p),0);
+			}
+			stack_pop(SP,i);
+		} else {
+			char *start;
+			int *loop;
+			XMov_rc(TMP2,p);
+			start = buf.c;
+			XMov_rp(TMP,SP,FIELD(0));
+			XMov_pc(SP,FIELD(0),0);
+			XMov_xr(ACC,TMP2,4,TMP);
+			stack_pop(SP,1);
+			XSub_rc(TMP2,1);
+			XCmp_rc(TMP2,0);
+			XJump(JNeq,loop);
+			*loop = (int)(start - buf.c);
+		}
+		break;
 	case MakeEnv:
 		XPush_c(GET_PC());
 		if( p >= MAX_ENV ) {
@@ -2230,7 +2253,7 @@ static void jit_opcode( jit_ctx *ctx, enum OPCODE op, int p ) {
 		char *jend, *start;
 		is_int(ACC,true,jerr1);
 		XMov_rp(TMP,ACC,FIELD(0));
-		XAnd_rc(TMP,7);
+		XAnd_rc(TMP,TAG_MASK);
 		XCmp_rb(TMP,VAL_FUNCTION);
 		XJump(JNeq,jerr2);
 		XMov_rp(TMP,ACC,FUNFIELD(nargs));
@@ -2244,7 +2267,7 @@ static void jit_opcode( jit_ctx *ctx, enum OPCODE op, int p ) {
 
 		PATCH_JUMP(jerr1);
 		PATCH_JUMP(jerr2);
-		runtime_error(18,false); // $apply
+		runtime_error(8,false); // $apply
 
 		// build the apply
 		PATCH_JUMP(jnext);
@@ -2346,7 +2369,7 @@ static void jit_opcode( jit_ctx *ctx, enum OPCODE op, int p ) {
 		XSub_rr(TMP,TMP2);
 		XCmp_rr(TMP,SP);
 		XJump(JEq,jok);
-		runtime_error(19,false); // Invalid End Trap
+		runtime_error(9,false); // Invalid End Trap
 		PATCH_JUMP(jok);
 
 		// restore VM jmp_buf
@@ -2374,7 +2397,7 @@ static void jit_opcode( jit_ctx *ctx, enum OPCODE op, int p ) {
 		XJump_near(jend);
 		PATCH_JUMP(jnot_int);
 		XMov_rp(TMP,ACC,FIELD(0));
-		XAnd_rc(TMP,7);
+		XAnd_rc(TMP,TAG_MASK);
 		XMov_rc(TMP2,CONST(NEKO_TYPEOF));
 		XMov_rx(ACC,TMP2,TMP,4);
 		PATCH_JUMP(jend);
@@ -2427,7 +2450,7 @@ static void jit_opcode( jit_ctx *ctx, enum OPCODE op, int p ) {
 		char *jend;
 		is_int(ACC,true,jerr1);
 		XMov_rp(TMP,ACC,FIELD(0));
-		XAnd_rc(TMP,7);
+		XAnd_rc(TMP,TAG_MASK);
 		XCmp_rb(TMP,VAL_STRING);
 		XJump(JNeq,jerr2);
 		begin_call();
@@ -2440,7 +2463,7 @@ static void jit_opcode( jit_ctx *ctx, enum OPCODE op, int p ) {
 		XJump_near(jend);
 		PATCH_JUMP(jerr1);
 		PATCH_JUMP(jerr2);
-		runtime_error(20,false); // $hash
+		runtime_error(10,false); // $hash
 		PATCH_JUMP(jend);
 		break;
 		}
@@ -2483,6 +2506,9 @@ static void jit_opcode( jit_ctx *ctx, enum OPCODE op, int p ) {
 
 		break;
 		}
+	case Loop:
+		// nothing
+		break;
 	default:
 		ERROR;
 	}
@@ -2558,13 +2584,8 @@ void neko_init_jit() {
 	FILL_BUFFER(jit_stack_expand,0,stack_expand);
 	FILL_BUFFER(jit_runtime_error,0,runtime_error);
 	FILL_BUFFER(jit_invalid_access,0,invalid_access);
-	for(i=0;i<OP_LAST;i++) {
-		FILL_BUFFER(jit_object_op,i,oop[i]);
-		FILL_BUFFER(jit_object_op_r,i,oop_r[i]);
-	}
 	FILL_BUFFER(jit_object_get,0,oo_get);
 	FILL_BUFFER(jit_object_set,0,oo_set);
-	FILL_BUFFER(jit_add,0,add);
 	for(i=0;i<NARGS;i++) {
 		FILL_BUFFER(jit_call_jit_normal,i,call_normal_jit[i]);
 		FILL_BUFFER(jit_call_jit_this,i,call_this_jit[i]);

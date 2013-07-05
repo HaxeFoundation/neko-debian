@@ -1,19 +1,24 @@
-/* ************************************************************************ */
-/*																			*/
-/*  Neko Virtual Machine													*/
-/*  Copyright (c)2005 Motion-Twin											*/
-/*																			*/
-/* This library is free software; you can redistribute it and/or			*/
-/* modify it under the terms of the GNU Lesser General Public				*/
-/* License as published by the Free Software Foundation; either				*/
-/* version 2.1 of the License, or (at your option) any later version.		*/
-/*																			*/
-/* This library is distributed in the hope that it will be useful,			*/
-/* but WITHOUT ANY WARRANTY; without even the implied warranty of			*/
-/* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU		*/
-/* Lesser General Public License or the LICENSE file for more details.		*/
-/*																			*/
-/* ************************************************************************ */
+/*
+ * Copyright (C)2005-2012 Haxe Foundation
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
 #include <string.h>
 #include <stdio.h>
 #include "neko.h"
@@ -28,7 +33,11 @@
 #endif
 
 #ifdef NEKO_WINDOWS
+#ifdef NEKO_STANDALONE
+#	define GC_NOT_DLL
+#else
 #	define GC_DLL
+#endif
 #	define GC_WIN32_THREADS
 #endif
 
@@ -108,6 +117,7 @@ static void null_warn_proc( char *msg, int arg ) {
 }
 
 void neko_gc_init() {
+	GC_set_warn_proc((GC_warn_proc)(void*)null_warn_proc);
 #	ifndef NEKO_WINDOWS
 	// we can't set this on windows with old GC since
 	// it's already initialized through its own DllMain
@@ -119,13 +129,13 @@ void neko_gc_init() {
 	GC_use_DllMain(); // needed to auto-detect threads created by Apache
 #	endif
 #endif
+	GC_java_finalization = 1;
 	GC_init();
 	GC_no_dls = 1;
 #ifdef LOW_MEM
 	GC_dont_expand = 1;
 #endif
 	GC_clear_roots();
-	GC_set_warn_proc((GC_warn_proc)(void*)null_warn_proc);
 #if defined(GC_LOG) && defined(NEKO_POSIX)
 	{
 		struct sigaction act;
@@ -166,7 +176,7 @@ EXTERN value alloc_empty_string( unsigned int size ) {
 	if( size > max_string_size )
 		failure("max_string_size reached");
 	s = (vstring*)gc_alloc_private_big(size+sizeof(vstring));
-	s->t = VAL_STRING | (size << 3);
+	s->t = VAL_STRING | (size << TAG_BITS);
 	(&s->c)[size] = 0;
 	return (value)s;
 }
@@ -184,6 +194,13 @@ EXTERN value alloc_float( tfloat f ) {
 	return (value)v;
 }
 
+EXTERN value alloc_int32( int i ) {
+	vint32 *v = (vint32*)gc_alloc_private(sizeof(vint32));
+	v->t = VAL_INT32;
+	v->i = i;
+	return (value)v;
+}
+
 EXTERN value alloc_array( unsigned int n ) {
 	value v;
 	if( n == 0 )
@@ -191,7 +208,7 @@ EXTERN value alloc_array( unsigned int n ) {
 	if( n > max_array_size )
 		failure("max_array_size reached");
 	v = (value)gc_alloc_big(sizeof(varray)+(n - 1)*sizeof(value));
-	v->t = VAL_ARRAY | (n << 3);
+	v->t = VAL_ARRAY | (n << TAG_BITS);
 	return v;
 }
 

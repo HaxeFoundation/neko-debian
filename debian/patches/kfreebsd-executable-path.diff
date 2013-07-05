@@ -5,11 +5,11 @@ Author: Jens Peter Secher <jps@debian.org>
 Forwarded: no
 Last-Update: 2010-02-13
 
-Index: neko/vm/main.c
+Index: b/vm/main.c
 ===================================================================
---- neko.orig/vm/main.c	2010-02-13 18:49:43.000000000 +0100
-+++ neko/vm/main.c	2010-02-15 20:54:47.000000000 +0100
-@@ -30,6 +30,9 @@
+--- a/vm/main.c
++++ b/vm/main.c
+@@ -35,6 +35,9 @@
  #ifdef NEKO_POSIX
  #	include <signal.h>
  #endif
@@ -19,7 +19,7 @@ Index: neko/vm/main.c
  
  #ifdef NEKO_STANDALONE
  	extern void neko_standalone_init();
-@@ -57,10 +60,24 @@
+@@ -62,10 +65,24 @@
  	if ( _NSGetExecutablePath(path, &path_len) )
  		return NULL;
  	return path;

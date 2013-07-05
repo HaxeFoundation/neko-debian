@@ -1,33 +1,15 @@
-neko (1.8.1-6ubuntu5) saucy; urgency=low
+neko (2.0.0-1) unstable; urgency=low
 
-  * Rebuild to pick up new libgc package name
+  * QA upload.
+  * New upstream version.
+  * Properly orphan the package (see #628939).
+  * Build-depend on apache2-dev, fix build errors with apache2.4.
+    Closes: #666858.
+  * Fix build failure with ld --as-needed. Closes: #641613.
+  * Fix some lintian warnings.
+  * TODO: Pass build flags to submodules. 
 
- -- Matthias Klose <doko@ubuntu.com>  Wed, 03 Jul 2013 12:04:17 +0000
-
-neko (1.8.1-6ubuntu4) raring; urgency=low
-
-  * Rebuild to pick up the new libgc1c3 dependency.
-
- -- Matthias Klose <doko@ubuntu.com>  Wed, 27 Feb 2013 13:39:51 +0000
-
-neko (1.8.1-6ubuntu3) quantal; urgency=low
-
-  * Rebuild to correct the compile-time-selected linker path on armhf.
-  * Move the as-needed fix from a debian-changes patch to its own.
-
- -- Adam Conrad <adconrad@ubuntu.com>  Thu, 11 Oct 2012 00:03:59 -0600
-
-neko (1.8.1-6ubuntu2) precise; urgency=low
-
-  * Rebuild for libmysqlclient transition
-
- -- Clint Byrum <clint@ubuntu.com>  Wed, 23 Nov 2011 23:58:41 -0800
-
-neko (1.8.1-6ubuntu1) oneiric; urgency=low
-
-  * Fix FTBFS with ld --as-needed. LP: #771060.
-
- -- Matthias Klose <doko@ubuntu.com>  Wed, 14 Sep 2011 15:45:59 +0200
+ -- Matthias Klose <doko@debian.org>  Fri, 05 Jul 2013 14:47:28 +0200
 
 neko (1.8.1-6) unstable; urgency=low
 

@@ -1,16 +1,23 @@
 /*
- *  Neko Compiler
- *  Copyright (c)2005 Motion-Twin
+ * Copyright (C)2005-2012 Haxe Foundation
  *
- *  This library is free software; you can redistribute it and/or
- *  modify it under the terms of the GNU Lesser General Public
- *  License as published by the Free Software Foundation; either
- *  version 2.1 of the License, or (at your option) any later version.
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
  *
- *  This library is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- *  Lesser General Public License or the LICENSE file for more details.
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
  */
 
 type opcode {
@@ -82,7 +89,8 @@ type opcode {
 	AccIndex0;
 	AccIndex1;
 	PhysCompare;
-	TailCall : (int, int);	
+	TailCall : (int, int);
+	Loop;
 };
 
 type global {
@@ -91,6 +99,7 @@ type global {
 	GlobalString : string;
 	GlobalFloat : string;
 	GlobalDebug : (string array, (int, int) array);
+	GlobalVersion : int;
 }
 
 exception Invalid_file;
@@ -169,12 +178,14 @@ function op_param(x) {
 	| AccIndex0
 	| AccIndex1
 	| PhysCompare
+	| Loop
 		-> false
 	}
 }
 
 function code_tables(ops) {
 	var ids = Hashtbl.create();
+	var fids = Array.create();
 	Array.iter (function(x) {
 		match x {
 		| AccField s
@@ -184,7 +195,7 @@ function code_tables(ops) {
 			try
 				var f = Hashtbl.find ids id;
 				if f != s then error("Field hashing conflict " + s + " and " + f);
-			catch { Not_found -> Hashtbl.add ids id s }
+			catch { Not_found -> Hashtbl.add ids id s; Array.add fids s }
 		| _ -> ()
 		}
 	}) ops;
@@ -195,7 +206,7 @@ function code_tables(ops) {
 		p := *p + (if op_param op then 2 else 1);
 	}) ops;
 	pos.[Array.length ops] := *p;
-	(ids , pos , *p)
+	(fids , pos , *p)
 }
 
 function write_debug_infos(ch,files,inf) {
@@ -213,7 +224,7 @@ function write_debug_infos(ch,files,inf) {
 	} else
 		invalid_arg();
 	Array.iter (function(s) { IO.write ch s; IO.write_char ch '\000' }) files;
-    IO.write_i32 ch (Array.length inf);
+	IO.write_i32 ch (Array.length inf);
 	var curfile = &0;
 	var curpos = &0;
 	var rcount = &0;
@@ -264,7 +275,7 @@ function write(ch,(globals,ops)) {
 	IO.write ch "NEKO";
 	var ids , pos , csize = code_tables ops;
 	IO.write_i32 ch (Array.length globals);
-	IO.write_i32 ch (Hashtbl.length ids);
+	IO.write_i32 ch (Array.length ids);
 	IO.write_i32 ch csize;
 	Array.iter (function(x) {
 		match x {
@@ -273,9 +284,10 @@ function write(ch,(globals,ops)) {
 		| GlobalString s -> IO.write_byte ch 3; IO.write_ui16 ch (String.length s); IO.write ch s
 		| GlobalFloat s -> IO.write_byte ch 4; IO.write ch s; IO.write_char ch '\000'
 		| GlobalDebug (files,inf) -> IO.write_byte ch 5; write_debug_infos ch files inf;
+		| GlobalVersion v -> IO.write_byte ch 6; IO.write_byte ch v
 		}
 	}) globals;
-	Hashtbl.iter (function(_,s) {
+	Array.iter (function(s) {
 		IO.write ch s;
 		IO.write_char ch '\000';
 	}) ids;
@@ -346,6 +358,7 @@ function write(ch,(globals,ops)) {
 			| AccIndex1 -> 61
 			| PhysCompare -> 62
 			| TailCall (args,st) -> pop := (args or (st << 3)); 63
+			| Loop -> pop := 64; 0
 		});
 		var n = *pop;
 		if n == inull then
@@ -380,7 +393,7 @@ function read_debug_infos(ch) {
 	var nfiles = IO.read_byte ch;
 	// see comments in read_debug_infos
 	var lot_of_files = &false;
-	var nfiles = if nfiles < 0x80 then 
+	var nfiles = if nfiles < 0x80 then
 			nfiles
 		else {
 			lot_of_files := true;
@@ -457,6 +470,8 @@ function read(ch) {
 			| 5 ->
 				var files, inf = read_debug_infos ch;
 				GlobalDebug files inf
+			| 6 ->
+				GlobalVersion(IO.read_byte ch)
 			| _ ->
 				throw Invalid_file
 			}
@@ -488,7 +503,7 @@ function read(ch) {
 			var op , p = match code and 3 {
 				| 0 -> (code >> 2 , inull)
 				| 1 -> (code >> 3 , ((code >> 2) and 1))
-				| 2 -> (code >> 2 , IO.read_byte ch)
+				| 2 -> if code == 2 then (IO.read_byte ch, inull) else (code >> 2 , IO.read_byte ch)
 				| 3 -> (code >> 2 , IO.read_i32 ch)
 				| _ -> assert()
 			};
@@ -557,6 +572,7 @@ function read(ch) {
 				| 61 -> AccIndex1
 				| 62 -> PhysCompare
 				| 63 -> TailCall (p and 7) (p >> 3)
+				| 64 -> Loop
 				| _ -> throw Invalid_file
 			};
 			pos.[*cpos] := Array.length ops;
@@ -595,7 +611,7 @@ function read(ch) {
 function dump(ch,(globals,ops)) {
 	var ids, pos , csize = code_tables ops;
 	IO.printf ch "nglobals : %d\n" (Array.length globals);
-	IO.printf ch "nfields : %d\n" (Hashtbl.length ids);
+	IO.printf ch "nfields : %d\n" (Array.length ids);
 	IO.printf ch "codesize : %d ops , %d total\n" (Array.length ops,csize);
 	IO.printf ch "GLOBALS =\n" ();
 	var marks = Array.make csize false;
@@ -612,11 +628,13 @@ function dump(ch,(globals,ops)) {
 				var ch, buf = IO.write_string();
 				write_debug_infos ch files inf;
 				sprintf "debug %d ops %d bytes" (Array.length inf,String.length buf())
+			| GlobalVersion v ->
+				"version " + string v
 			})
 	}) globals;
 	IO.printf ch "FIELDS =\n" ();
-	Hashtbl.iter (function(h,f) {
-		IO.printf ch "  %s%s%.8X\n" (f , if String.length(f) >= 24 then " " else String.make (24 - String.length f) ' ', h);
+	Array.iter (function(f) {
+		IO.printf ch "  %s%s%.8X\n" (f , if String.length(f) >= 24 then " " else String.make (24 - String.length f) ' ', hash_field f);
 	}) ids;
 	IO.printf ch "CODE =\n" ();
 	function str(s,i) { s + " " + string i };
