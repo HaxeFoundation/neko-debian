@@ -1,41 +1,42 @@
-/* ************************************************************************ */
-/*																			*/
-/*  Neko Standard Library													*/
-/*  Copyright (c)2005 Motion-Twin											*/
-/*																			*/
-/* This library is free software; you can redistribute it and/or			*/
-/* modify it under the terms of the GNU Lesser General Public				*/
-/* License as published by the Free Software Foundation; either				*/
-/* version 2.1 of the License, or (at your option) any later version.		*/
-/*																			*/
-/* This library is distributed in the hope that it will be useful,			*/
-/* but WITHOUT ANY WARRANTY; without even the implied warranty of			*/
-/* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU		*/
-/* Lesser General Public License or the LICENSE file for more details.		*/
-/*																			*/
-/* ************************************************************************ */
+/*
+ * Copyright (C)2005-2012 Haxe Foundation
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
 #include <neko.h>
 
 /**
 	<doc>
 	<h1>Int32</h1>
 	<p>
-	Int32 is an abstract type that can be used to store the full 32 bits of an
-	integer. The type ['int32] means that the value is a real int32. The type
-	[#int32] means [(int | 'int32)] and accept then the both kind of integers.
+	Int32 api is deprecated as of Neko 2.0, which have native support for Int32.
 	</p>
 	</doc>
 **/
 
 /**
 	int32_new : (#int32 | float) -> 'int32
-	<doc>Allocate an int32 from any integer or a float</doc>
+	<doc>Allocate an int32 from any number</doc>
 **/
 static value int32_new( value v ) {
-	if( val_is_number(v) )
-		return alloc_int32((int)val_number(v));
-	val_check_kind(v,k_int32);
-	return alloc_int32(val_int32(v));
+	val_check(v,number);
+	return alloc_int32((int)val_number(v));
 }
 
 /**
@@ -44,8 +45,8 @@ static value int32_new( value v ) {
 **/
 static value int32_to_int( value v ) {
 	int i;
-	val_check(v,int32);
-	i = val_int32(v);
+	val_check(v,any_int);
+	i = val_any_int(v);
 	if( need_32_bits(i) )
 		neko_error();
 	return alloc_int(i);
@@ -56,8 +57,8 @@ static value int32_to_int( value v ) {
 	<doc>Return the float value of the integer.</doc>
 **/
 static value int32_to_float( value v ) {
-	val_check(v,int32);	
-	return alloc_float(val_int32(v));
+	val_check(v,any_int);	
+	return alloc_float(val_any_int(v));
 }
 
 /**
@@ -66,10 +67,10 @@ static value int32_to_float( value v ) {
 **/
 static value int32_compare( value v1, value v2 ) {
 	int i1, i2;
-	val_check(v1,int32);
-	val_check(v2,int32);
-	i1 = val_int32(v1);
-	i2 = val_int32(v2);
+	val_check(v1,any_int);
+	val_check(v2,any_int);
+	i1 = val_any_int(v1);
+	i2 = val_any_int(v2);
 	if( i1 == i2 )
 		return alloc_int(0);
 	else if( i1 > i2 )
@@ -81,9 +82,9 @@ static value int32_compare( value v1, value v2 ) {
 #define INT32_OP(op_name,op) \
 	static value int32_##op_name( value v1, value v2 ) { \
 		int r; \
-		val_check(v1,int32); \
-		val_check(v2,int32); \
-		r = val_int32(v1) op val_int32(v2); \
+		val_check(v1,any_int); \
+		val_check(v2,any_int); \
+		r = val_any_int(v1) op val_any_int(v2); \
 		return alloc_best_int(r); \
 	} \
 	DEFINE_PRIM(int32_##op_name,2)
@@ -91,8 +92,8 @@ static value int32_compare( value v1, value v2 ) {
 #define INT32_UNOP(op_name,op) \
 	static value int32_##op_name( value v ) { \
 		int r; \
-		val_check(v,int32); \
-		r = op val_int32(v); \
+		val_check(v,any_int); \
+		r = op val_any_int(v); \
 		return alloc_best_int(r); \
 	} \
 	DEFINE_PRIM(int32_##op_name,1)
@@ -101,12 +102,12 @@ static value int32_compare( value v1, value v2 ) {
 	static value int32_##op_name( value v1, value v2 ) { \
 		int d; \
 		int r; \
-		val_check(v1,int32); \
-		val_check(v2,int32); \
-		d = val_int32(v2); \
+		val_check(v1,any_int); \
+		val_check(v2,any_int); \
+		d = val_any_int(v2); \
 		if( d == 0 ) \
 			neko_error(); \
-		r = val_int32(v1) op d; \
+		r = val_any_int(v1) op d; \
 		return alloc_best_int(r); \
 	} \
 	DEFINE_PRIM(int32_##op_name,2)
@@ -117,9 +118,9 @@ static value int32_compare( value v1, value v2 ) {
 **/
 static value int32_ushr( value v1, value v2 ) {
 	int r;
-	val_check(v1,int32);
-	val_check(v2,int32);
-	r = ((unsigned int)val_int32(v1)) >> val_int32(v2);
+	val_check(v1,any_int);
+	val_check(v2,any_int);
+	r = ((unsigned int)val_any_int(v1)) >> val_any_int(v2);
 	return alloc_best_int(r);
 }
 
@@ -193,7 +194,7 @@ INT32_OP(xor,^);
 	</doc>
 **/
 static value int32_address( value v ) {
-	return alloc_best_int((int_val)v);
+	return alloc_best_int((int)(int_val)v);
 }
 
 DEFINE_PRIM(int32_new,1);

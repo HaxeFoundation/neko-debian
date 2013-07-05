@@ -1,21 +1,27 @@
-/* ************************************************************************ */
-/*																			*/
-/*  Neko Standard Library													*/
-/*  Copyright (c)2005 Motion-Twin											*/
-/*																			*/
-/* This library is free software; you can redistribute it and/or			*/
-/* modify it under the terms of the GNU Lesser General Public				*/
-/* License as published by the Free Software Foundation; either				*/
-/* version 2.1 of the License, or (at your option) any later version.		*/
-/*																			*/
-/* This library is distributed in the hope that it will be useful,			*/
-/* but WITHOUT ANY WARRANTY; without even the implied warranty of			*/
-/* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU		*/
-/* Lesser General Public License or the LICENSE file for more details.		*/
-/*																			*/
-/* ************************************************************************ */
+/*
+ * Copyright (C)2005-2012 Haxe Foundation
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
 #include <neko.h>
 #include <string.h>
+#include "sha1.h"
 
 /**
 	<doc>
@@ -289,6 +295,9 @@ static void make_md5_rec( md5_context *m, value v, stack *cur ) {
 	case VAL_INT:
 		md5_uint(m,(uint32)(int_val)v);
 		break;
+	case VAL_INT32:
+		md5_uint(m,(uint32)val_int32(v));
+		break;
 	case VAL_BOOL:
 		md5_uint(m,val_bool(v)?8:16);
 		break;
@@ -358,6 +367,28 @@ static value make_md5( value v ) {
 	return out;
 }
 
+/**
+	make_sha1 : string -> pos:int -> len:int -> string
+	<doc>Build a SHA1 digest for the given substring</doc>
+**/
+static value make_sha1( value s, value p, value l ) {
+	SHA1_CTX ctx;
+	SHA1_DIGEST result;
+	int pp , ll;
+	val_check(s,string);
+	val_check(p,int);
+	val_check(l,int);
+	pp = val_int(p);
+	ll = val_int(l);
+	if( pp < 0 || ll < 0 || pp + ll < 0 || pp + ll > val_strlen(s) )
+		neko_error();
+	sha1_init(&ctx);
+	sha1_update(&ctx,(unsigned char*)val_string(l)+pp,ll);
+	sha1_final(&ctx,result);
+	return copy_string( (char*)result, sizeof(SHA1_DIGEST) );
+}
+
 DEFINE_PRIM(make_md5,1);
+DEFINE_PRIM(make_sha1,3);
 
 /* ************************************************************************ */

@@ -124,7 +124,6 @@ MYSQL *mysql_real_connect( MYSQL *m, const char *host, const char *user, const c
 		error(m,"Failed to connect on host '%s'",host);
 		return NULL;
 	}
-	psock_set_timeout(m->s,18000); // 5 hours
 	if( !myp_read_packet(m,p) ) {
 		myp_close(m);
 		error(m,"Failed to read handshake packet",NULL);
@@ -133,6 +132,7 @@ MYSQL *mysql_real_connect( MYSQL *m, const char *host, const char *user, const c
 	// process handshake packet
 	{
 		char filler[13];
+		unsigned int len;
 		m->infos.proto_version = myp_read_byte(p);
 		// this seems like an error packet
 		if( m->infos.proto_version == 0xFF ) {
@@ -147,12 +147,16 @@ MYSQL *mysql_real_connect( MYSQL *m, const char *host, const char *user, const c
 		m->infos.server_flags = myp_read_ui16(p);
 		m->infos.server_charset = myp_read_byte(p);
 		m->infos.server_status = myp_read_ui16(p);
-		myp_read(p,filler,13);
+		m->infos.server_flags |= myp_read_ui16(p) << 16;
+		len = myp_read_byte(p);
+		myp_read(p,filler,10);
 		// try to disable 41
 		m->is41 = (m->infos.server_flags & FL_PROTOCOL_41) != 0;
 		if( !p->error && m->is41 )
 			myp_read(p,scramble_buf + 8,13);
-		if( p->error || p->pos != p->size ) {
+		if( p->pos != p->size )
+			myp_read_string(p); // 5.5+
+		if( p->error ) {
 			myp_close(m);
 			error(m,"Failed to decode server handshake",NULL);
 			return NULL;
@@ -238,6 +242,8 @@ send_cnx_packet:
 			return NULL;
 		}
 	}
+	// we are connected, setup a longer timeout
+	psock_set_timeout(m->s,18000);
 	return m;
 }
 
@@ -405,7 +411,19 @@ int mysql_escape_string( MYSQL *m, char *sout, const char *sin, int length ) {
 	return myp_escape_string(m->infos.server_charset,sout,sin,length);
 }
 
+const char *mysql_character_set_name( MYSQL *m ) {
+	const char *name = myp_charset_name(m->infos.server_charset);
+	if( name == NULL ) {
+		static char tmp[512];
+		sprintf(tmp,"#%d",m->infos.server_charset);
+		return tmp;
+	}
+	return name;
+}
+
 int mysql_real_escape_string( MYSQL *m, char *sout, const char *sin, int length ) {
+	if( !myp_supported_charset(m->infos.server_charset) )
+		return -1;
 	if( m->infos.server_status & SERVER_STATUS_NO_BACKSLASH_ESCAPES )
 		return myp_escape_quotes(m->infos.server_charset,sout,sin,length);
 	return myp_escape_string(m->infos.server_charset,sout,sin,length);
