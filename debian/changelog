@@ -1,3 +1,10 @@
+neko (2.0.0-2) unstable; urgency=low
+
+  * QA upload.
+  * Update copyright, changed to BSD.
+
+ -- Matthias Klose <doko@debian.org>  Fri, 05 Jul 2013 16:32:32 +0200
+
 neko (2.0.0-1) unstable; urgency=low
 
   * QA upload.
