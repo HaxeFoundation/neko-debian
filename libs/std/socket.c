@@ -1,19 +1,24 @@
-/* ************************************************************************ */
-/*																			*/
-/*  Neko Standard Library													*/
-/*  Copyright (c)2005 Motion-Twin											*/
-/*																			*/
-/* This library is free software; you can redistribute it and/or			*/
-/* modify it under the terms of the GNU Lesser General Public				*/
-/* License as published by the Free Software Foundation; either				*/
-/* version 2.1 of the License, or (at your option) any later version.		*/
-/*																			*/
-/* This library is distributed in the hope that it will be useful,			*/
-/* but WITHOUT ANY WARRANTY; without even the implied warranty of			*/
-/* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU		*/
-/* Lesser General Public License or the LICENSE file for more details.		*/
-/*																			*/
-/* ************************************************************************ */
+/*
+ * Copyright (C)2005-2012 Haxe Foundation
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
 #include <string.h>
 #include <neko.h>
 #include <neko_vm.h>
@@ -91,7 +96,7 @@ DEFINE_KIND(k_poll);
 static value block_error() {
 #ifdef NEKO_WINDOWS
 	int err = WSAGetLastError();
-	if( err == WSAEWOULDBLOCK || err == WSAEALREADY )
+	if( err == WSAEWOULDBLOCK || err == WSAEALREADY || err == WSAETIMEDOUT )
 #else
 	if( errno == EAGAIN || errno == EWOULDBLOCK || errno == EINPROGRESS || errno == EALREADY )
 #endif
@@ -465,7 +470,7 @@ static value make_array_result( value a, fd_set *tmp ) {
 }
 
 static void init_timeval( tfloat f, struct timeval *t ) {
-	t->tv_usec = ((int)(f*1000000)) % 1000000;
+	t->tv_usec = (int)((f - (int)f) * 1000000);
 	t->tv_sec = (int)f;
 }
 

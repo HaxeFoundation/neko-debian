@@ -1,19 +1,24 @@
-/* ************************************************************************ */
-/*																			*/
-/*  Neko Standard Library													*/
-/*  Copyright (c)2005 Motion-Twin											*/
-/*																			*/
-/* This library is free software; you can redistribute it and/or			*/
-/* modify it under the terms of the GNU Lesser General Public				*/
-/* License as published by the Free Software Foundation; either				*/
-/* version 2.1 of the License, or (at your option) any later version.		*/
-/*																			*/
-/* This library is distributed in the hope that it will be useful,			*/
-/* but WITHOUT ANY WARRANTY; without even the implied warranty of			*/
-/* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU		*/
-/* Lesser General Public License or the LICENSE file for more details.		*/
-/*																			*/
-/* ************************************************************************ */
+/*
+ * Copyright (C)2005-2012 Haxe Foundation
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
 #include <neko.h>
 #include <neko_mod.h>
 
@@ -77,6 +82,10 @@ static int mem_size_rec( value v,  vtree **l ) {
 		if( mem_cache(v,l) )
 			return 0;
 		return sizeof(vfloat);
+	case VAL_INT32:
+		if( mem_cache(v,l) )
+			return 0;
+		return sizeof(vint32);
 	case VAL_STRING:
 		if( mem_cache(v,l) )
 			return 0;
@@ -119,11 +128,14 @@ static int mem_size_rec( value v,  vtree **l ) {
 		}
 	case VAL_ABSTRACT:
 		{
-			int t = sizeof(vabstract);
+			int t;
+			if( mem_cache(v,l) )
+				return 0;
+			t = sizeof(vabstract);
 			if( val_kind(v) == neko_kind_module )
 				t += mem_module((neko_module*)val_data(v),l);
 			else if( val_kind(v) == k_hash ) {
-				vhash *h = (vhash*)val_data(v);				
+				vhash *h = (vhash*)val_data(v);
 				int i;
 				t += sizeof(vhash);
 				t += sizeof(hcell*) * h->ncells;
@@ -136,7 +148,7 @@ static int mem_size_rec( value v,  vtree **l ) {
 						c = c->next;
 					}
 				}
-			}	
+			}
 			return t;
 		}
 	default:
@@ -183,6 +195,24 @@ static value mem_size( value v ) {
 	return alloc_int(mem_size_rec(v,&t));
 }
 
+/**
+	mem_local_size : any -> any array -> int
+	<doc>Calculate the quite precise amount of VM memory reachable from this value, without scanning the values contained in the array.</doc>
+**/
+static value mem_local_size( value v, value a ) {
+	vtree *t = NULL;
+	int i;
+	val_check(a,array);
+	for(i=0;i<val_array_size(a);i++) {
+		value k = val_array_ptr(a)[i];
+		mem_cache(k,&t);
+		if( val_is_abstract(k) && val_kind(k) == neko_kind_module )
+			mem_cache(val_data(k),&t);
+	}
+	return alloc_int(mem_size_rec(v,&t));
+}
+
 DEFINE_PRIM(mem_size,1);
+DEFINE_PRIM(mem_local_size,2);
 
 /* ************************************************************************ */

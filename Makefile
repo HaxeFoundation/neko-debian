@@ -1,30 +1,27 @@
+# This Makefile works by default for Linux
+# You can active other OS support by compiling with the following options
+#
+# For OSX
+#   make os=osx
+#
+# For MingW/MSys
+#   make os=mingw
+#
+
 ## CONFIG
 
 INSTALL_PREFIX = /usr/local
 
-CFLAGS = -Wall -O3 -fPIC -fomit-frame-pointer -I vm -D_GNU_SOURCE
+CFLAGS = -Wall -O3 -fPIC -fomit-frame-pointer -I vm -D_GNU_SOURCE -I libs/common
 EXTFLAGS = -pthread
-MAKESO = $(CC) -shared -WBsymbolic
+MAKESO = $(CC) -shared -Wl,-Bsymbolic
 LIBNEKO_NAME = libneko.so
 LIBNEKO_LIBS = -ldl -lgc -lm
 NEKOVM_FLAGS = -Lbin -lneko
-STD_NDLL_FLAGS = ${NEKOVM_FLAGS}
+STD_NDLL_FLAGS = ${NEKOVM_FLAGS} -lrt
 INSTALL_FLAGS =
 
 NEKO_EXEC = LD_LIBRARY_PATH=../bin:${LD_LIBRARY_PATH} NEKOPATH=../boot:../bin ../bin/neko
-
-# For OSX
-#
-# MACOSX = 1
-
-# For OSX Universal Binaries
-#
-# OSX_UNIVERSAL = 1
-
-
-# For 64 bit
-#
-# CFLAGS += -D_64BITS
 
 # For profiling VM
 #
@@ -34,10 +31,10 @@ NEKO_EXEC = LD_LIBRARY_PATH=../bin:${LD_LIBRARY_PATH} NEKOPATH=../boot:../bin ..
 #
 # CFLAGS += -DLOW_MEM
 
-# For MINGW/MSYS
+## MINGW SPECIFIC
 
-ifeq (${WIN32}, 1)
-CFLAGS = -g -Wall -O3 -momit-leaf-frame-pointer -I vm -I /usr/local/include
+ifeq (${os}, mingw)
+CFLAGS = -g -Wall -O3 -momit-leaf-frame-pointer -I vm -I /usr/local/include -I libs/common
 EXTFLAGS =
 MAKESO = $(CC) -O -shared
 LIBNEKO_NAME = neko.dll
@@ -47,48 +44,27 @@ endif
 
 ### OSX SPECIFIC
 
-ifeq (${UNIVERSAL},1)
-MACOSX=1
-OSX_UNIVERSAL=1
-endif
-
-ifeq (${MACOSX}, 1)
-export MACOSX_DEPLOYMENT_TARGET=10.3
+ifeq (${os}, osx)
+export MACOSX_DEPLOYMENT_TARGET=10.4
 EXTFLAGS =
 MAKESO = ${CC}
 LIBNEKO_NAME = libneko.dylib
 LIBNEKO_INSTALL = -install_name @executable_path/${LIBNEKO_NAME}
-LIBNEKO_LIBS = -ldl -lgc -lm -dynamiclib -single_module ${LIBNEKO_INSTALL}
-NEKOVM_FLAGS = -L${PWD}/bin -lneko
+LIBNEKO_LIBS = -ldl /opt/local/lib/libgc.a -lm -dynamiclib -single_module ${LIBNEKO_INSTALL}
+NEKOVM_FLAGS = -L${CURDIR}/bin -lneko
 STD_NDLL_FLAGS = -bundle -undefined dynamic_lookup ${NEKOVM_FLAGS}
-
-ifeq (${OSX_UNIVERSAL}, 1)
-
-export MACOSX_DEPLOYMENT_TARGET_i386=10.4
-export MACOSX_DEPLOYMENT_TARGET_ppc=10.3
-CFLAGS += -arch ppc -arch i386 -L/usr/local/lib -L/opt/local/lib -I/opt/local/include
-UNIV = libs/include/osx_universal
-#linking to shared lib (.a) explicitly:
-LIBNEKO_DEPS = ${UNIV}/libgc.a  -lSystemStubs
-LIBNEKO_LIBS = ${LIBNEKO_DEPS} -dynamiclib -single_module ${LIBNEKO_INSTALL} ${CFLAGS}
-NEKOVM_FLAGS = -L${PWD}/bin -lneko
-STD_NDLL_FLAGS = -bundle ${NEKOVM_FLAGS} ${CFLAGS}
-INSTALL_FLAGS = -osx-universal
-
-endif
+CFLAGS += -L/usr/local/lib -L/opt/local/lib -I/opt/local/include
+INSTALL_FLAGS = -static
 
 endif
 
 ### MAKE
 
 VM_OBJECTS = vm/stats.o vm/main.o
-STD_OBJECTS = libs/std/buffer.o libs/std/date.o libs/std/file.o libs/std/init.o libs/std/int32.o libs/std/math.o libs/std/string.o libs/std/random.o libs/std/serialize.o libs/std/socket.o libs/std/sys.o libs/std/xml.o libs/std/module.o libs/std/md5.o libs/std/utf8.o libs/std/memory.o libs/std/misc.o libs/std/thread.o libs/std/process.o
+STD_OBJECTS = libs/std/buffer.o libs/std/date.o libs/std/file.o libs/std/init.o libs/std/int32.o libs/std/math.o libs/std/string.o libs/std/random.o libs/std/serialize.o libs/std/socket.o libs/std/sys.o libs/std/xml.o libs/std/module.o libs/common/sha1.o libs/std/md5.o libs/std/utf8.o libs/std/memory.o libs/std/misc.o libs/std/thread.o libs/std/process.o
 LIBNEKO_OBJECTS = vm/alloc.o vm/builtins.o vm/callback.o vm/interp.o vm/load.o vm/objtable.o vm/others.o vm/hash.o vm/module.o vm/jit_x86.o vm/threads.o
 
 all: createbin libneko neko std compiler libs
-
-universal:
-	make MACOSX=1 OSX_UNIVERSAL=1
 
 createbin:
 	-mkdir bin 2>/dev/null
@@ -99,6 +75,10 @@ libs:
 	(cd src; ${NEKO_EXEC} nekoc tools/install.neko)
 	(cd src; ${NEKO_EXEC} tools/install ${INSTALL_FLAGS})
 
+tools:
+	(cd src; ${NEKO_EXEC} nekoc tools/install.neko)
+	(cd src; ${NEKO_EXEC} tools/install -nolibs)
+	
 doc:
 	(cd src; ${NEKO_EXEC} nekoc tools/makedoc.neko)
 	(cd src; ${NEKO_EXEC} tools/makedoc)

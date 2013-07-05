@@ -1,19 +1,24 @@
-/* ************************************************************************ */
-/*																			*/
-/*  Neko Virtual Machine													*/
-/*  Copyright (c)2005 Motion-Twin											*/
-/*																			*/
-/* This library is free software; you can redistribute it and/or			*/
-/* modify it under the terms of the GNU Lesser General Public				*/
-/* License as published by the Free Software Foundation; either				*/
-/* version 2.1 of the License, or (at your option) any later version.		*/
-/*																			*/
-/* This library is distributed in the hope that it will be useful,			*/
-/* but WITHOUT ANY WARRANTY; without even the implied warranty of			*/
-/* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU		*/
-/* Lesser General Public License or the LICENSE file for more details.		*/
-/*																			*/
-/* ************************************************************************ */
+/*
+ * Copyright (C)2005-2012 Haxe Foundation
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -338,7 +343,7 @@ neko_module *neko_read_module( reader r, readp p, value loader ) {
 	unsigned char t;
 	unsigned short stmp;
 	register char *tmp = NULL;
-	int entry;
+	unsigned char version = 1;
 	register neko_module *m = (neko_module*)alloc(sizeof(neko_module));
 	neko_vm *vm = NEKO_VM();
 	READ_LONG(itmp);
@@ -392,6 +397,10 @@ neko_module *neko_read_module( reader r, readp p, value loader ) {
 			}
 			m->globals[i] = val_null;
 			break;
+		case 6:
+			READ(&version,1);
+			m->globals[i] = val_null;
+			break;
 		default:
 			ERROR();
 			break;
@@ -430,9 +439,15 @@ neko_module *neko_read_module( reader r, readp p, value loader ) {
 			break;
 		case 2:
 			m->code[i++] = (t >> 2);
-			READ(&t,1);
-			tmp[i] = 0;
-			m->code[i++] = t;
+			if( t == 2 ) {
+				// extra opcodes
+				READ(&t,1);
+				m->code[i-1] = t;
+			} else {
+				READ(&t,1);
+				tmp[i] = 0;
+				m->code[i++] = t;
+			}
 			break;
 		case 3:
 			m->code[i++] = (t >> 2);
@@ -444,7 +459,6 @@ neko_module *neko_read_module( reader r, readp p, value loader ) {
 	}
 	tmp[i] = 1;
 	m->code[i] = Last;
-	entry = (int)m->code[1];
 	if( vm->fstats ) {
 		vm->fstats(vm,"neko_read_module_code",0);
 		vm->fstats(vm,"neko_read_module_check",1);
@@ -473,7 +487,10 @@ neko_module *neko_read_module( reader r, readp p, value loader ) {
 			m->code[i+1] = (int_val)(m->code + itmp);
 			break;
 		case AccInt:
-			m->code[i+1] = (int_val)alloc_int((int)itmp);
+			if( need_32_bits((int)itmp) )
+				m->code[i] = AccInt32;
+			else
+				m->code[i+1] = (int_val)alloc_int((int)itmp);
 			break;
 		case AccIndex:
 			m->code[i+1] += 2;
@@ -522,9 +539,11 @@ neko_module *neko_read_module( reader r, readp p, value loader ) {
 		case MakeArray:
 			if( itmp > 0x10000 )
 				failure("Too much big array");
+			if( version >= 2 )
+				m->code[i] = MakeArray2;
 			break;
 		case JumpTable:
-			if( itmp > 0xff || i + 1 + itmp * 2 >= m->codesize )
+			if( itmp > 512 || i + 1 + itmp * 2 >= m->codesize )
 				ERROR();
 			m->code[i+1] <<= 1;
 			break;

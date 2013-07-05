@@ -1,19 +1,24 @@
-/* ************************************************************************ */
-/*																			*/
-/*  Tora - Neko Application Server											*/
-/*  Copyright (c)2008 Motion-Twin											*/
-/*																			*/
-/* This library is free software; you can redistribute it and/or			*/
-/* modify it under the terms of the GNU Lesser General Public				*/
-/* License as published by the Free Software Foundation; either				*/
-/* version 2.1 of the License, or (at your option) any later version.		*/
-/*																			*/
-/* This library is distributed in the hope that it will be useful,			*/
-/* but WITHOUT ANY WARRANTY; without even the implied warranty of			*/
-/* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU		*/
-/* Lesser General Public License or the LICENSE file for more details.		*/
-/*																			*/
-/* ************************************************************************ */
+/*
+ * Copyright (C)2005-2012 Haxe Foundation
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
 #include <httpd.h>
 #include <http_config.h>
 #include <http_core.h>
@@ -23,6 +28,7 @@
 #include "protocol.h"
 
 #ifndef OS_WINDOWS
+#	include <arpa/inet.h>
 #	define strcmpi	strcasecmp
 #endif
 
@@ -44,8 +50,10 @@
 #	define ap_palloc		apr_palloc
 #	define LOG_SUCCESS		APR_SUCCESS,
 #	define REDIRECT			HTTP_MOVED_TEMPORARILY
+#	define REMOTE_ADDR(c)	c->remote_addr->sa.sin.sin_addr
 #else
 #	define LOG_SUCCESS
+#	define REMOTE_ADDR(c)	c->remote_addr.sin_addr
 #endif
 
 #define DEFAULT_HOST			"127.0.0.1"
@@ -58,15 +66,19 @@ typedef struct {
 	int port_max;
 	int max_post_size;
 	int hits;
+	bool proxy_mode;
 } mconfig;
 
 typedef struct {
 	request_rec *r;
 	proto *p;
 	char *post_data;
+	char *xff;
+	char *client_ip;
 	int post_data_size;
 	bool headers_sent;
 	bool is_multipart;
+	bool is_form_post;
 	bool need_discard;
 } mcontext;
 
@@ -77,7 +89,10 @@ static int get_client_header( void *_c, const char *key, const char *val ) {
 	mcontext *c = (mcontext*)_c;
 	if( key == NULL || val == NULL )
 		return 1;
-	protocol_send_header(c->p,key,val);
+	if( config.proxy_mode && strcmpi(key,"X-Forwarded-For") == 0 )
+		protocol_send_header(c->p,key,c->xff);
+	else
+		protocol_send_header(c->p,key,val);
 	return 1;
 }
 
@@ -90,7 +105,7 @@ static void do_get_params( void *_c ) {
 	mcontext *c = (mcontext*)_c;
 	if( c->r->args )
 		protocol_send_raw_params(c->p,c->r->args);
-	if( c->post_data )
+	if( c->post_data && c->is_form_post )
 		protocol_send_raw_params(c->p,c->post_data);
 }
 
@@ -168,8 +183,11 @@ static int tora_handler( request_rec *r ) {
 	c->need_discard = false;
 	c->is_multipart = false;
 	c->headers_sent = false;
+	c->is_form_post = false;
 	c->r = r;
 	c->post_data = NULL;
+	c->xff = NULL;
+	c->client_ip = NULL;
 	c->p = NULL;
 	c->r->content_type = "text/html";
 	config.hits++;
@@ -197,6 +215,7 @@ static int tora_handler( request_rec *r ) {
 			}
 			c->post_data[tlen] = 0;
 			c->post_data_size = tlen;
+			c->is_form_post = ctype == NULL || (strstr(ctype,"urlencoded") != NULL);
 		}
 	}
 
@@ -210,7 +229,26 @@ static int tora_handler( request_rec *r ) {
 		infos.script = r->filename;
 		infos.uri = first->uri;
 		infos.hostname = r->hostname ? r->hostname : "";
-		infos.client_ip = r->connection->remote_ip;
+		if( config.proxy_mode ) {
+			const char *xff = ap_table_get(r->headers_in,"X-Forwarded-For");
+			if( xff == NULL )
+				infos.client_ip = r->connection->remote_ip;
+			else {
+				char tmp;
+				char *xend = (char*)xff + strlen(xff) - 1;
+				while( xend > xff && *xend != ' ' && *xend != ',' )
+					xend--;
+				c->client_ip = strdup(xend);
+				infos.client_ip = c->client_ip;
+				if( xend > xff && *xend == ' ' && xend[-1] == ',' )
+					xend--;
+				tmp = *xend;
+				*xend = 0;
+				c->xff = strdup(xff);
+				*xend = tmp;
+			}
+		} else
+			infos.client_ip = inet_ntoa(REMOTE_ADDR(r->connection));
 		infos.http_method = r->method;
 		infos.get_data = r->args;
 		infos.post_data = c->post_data;
@@ -238,6 +276,8 @@ static int tora_handler( request_rec *r ) {
 
 	// cleanup
 	protocol_free(c->p);
+	free(c->xff);
+	free(c->client_ip);
 	free(c->post_data);
 	send_headers(c); // in case...
 	if( c->need_discard )
@@ -278,6 +318,7 @@ static const char *mod_tora_config( cmd_parms *cmd, MCONFIG mconfig, const char 
 	else if( strcmp(code,"PORT") == 0 ) { config.port_min = value; config.port_max = value; }
 	else if( strcmp(code,"PORT_MAX") == 0 ) config.port_max = value;
 	else if( strcmp(code,"POST_SIZE") == 0 ) config.max_post_size = value;
+	else if( strcmp(code,"PROXY_MODE") == 0 ) config.proxy_mode = value;
 	else ap_log_error(__FILE__,__LINE__,APLOG_WARNING,LOG_SUCCESS cmd->server,"Unknown ModTora configuration command '%s'",code);
 	free(code);
 	return NULL;

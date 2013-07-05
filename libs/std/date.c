@@ -1,19 +1,24 @@
-/* ************************************************************************ */
-/*																			*/
-/*  Neko Standard Library													*/
-/*  Copyright (c)2005 Motion-Twin											*/
-/*																			*/
-/* This library is free software; you can redistribute it and/or			*/
-/* modify it under the terms of the GNU Lesser General Public				*/
-/* License as published by the Free Software Foundation; either				*/
-/* version 2.1 of the License, or (at your option) any later version.		*/
-/*																			*/
-/* This library is distributed in the hope that it will be useful,			*/
-/* but WITHOUT ANY WARRANTY; without even the implied warranty of			*/
-/* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU		*/
-/* Lesser General Public License or the LICENSE file for more details.		*/
-/*																			*/
-/* ************************************************************************ */
+/*
+ * Copyright (C)2005-2012 Haxe Foundation
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
 #include <neko.h>
 #include <time.h>
 #include <stdio.h>
@@ -96,6 +101,7 @@ static value date_new( value s ) {
 			break;
 		case 10:
 			sscanf(val_string(s),"%4d-%2d-%2d",&t.tm_year,&t.tm_mon,&t.tm_mday);
+			t.tm_isdst = -1;
 			break;
 		default:
 			{
@@ -121,11 +127,11 @@ static value date_format( value o, value fmt ) {
 	char buf[128];
 	struct tm t;
 	time_t d;
-	val_check(o,int32);
+	val_check(o,any_int);
 	if( val_is_null(fmt) )
 		fmt = alloc_string("%Y-%m-%d %H:%M:%S");
 	val_check(fmt,string);
-	d = val_int32(o);
+	d = val_any_int(o);
 	if( localtime_r(&d,&t) == NULL )
 		neko_error();
 	strftime(buf,127,val_string(fmt),&t);
@@ -139,11 +145,11 @@ static value date_format( value o, value fmt ) {
 static value date_set_hour( value o, value h, value m, value s ) {
 	struct tm t;
 	time_t d;
-	val_check(o,int32);
+	val_check(o,any_int);
 	val_check(h,int);
 	val_check(m,int);
 	val_check(s,int);
-	d = val_int32(o);
+	d = val_any_int(o);
 	if( localtime_r(&d,&t) == NULL )
 		neko_error();
 	t.tm_hour = val_int(h);
@@ -152,7 +158,7 @@ static value date_set_hour( value o, value h, value m, value s ) {
 	d = mktime(&t);
 	if( d == -1 )
 		neko_error();
-	return alloc_int32(d);
+	return alloc_int32((int)d);
 }
 
 /**
@@ -162,11 +168,11 @@ static value date_set_hour( value o, value h, value m, value s ) {
 static value date_set_day( value o, value y, value m, value d ) {
 	struct tm t;
 	time_t date;
-	val_check(o,int32);
+	val_check(o,any_int);
 	val_check(y,int);
 	val_check(m,int);
 	val_check(d,int);
-	date = val_int32(o);
+	date = val_any_int(o);
 	if( localtime_r(&date,&t) == NULL )
 		neko_error();
 	t.tm_year = val_int(y) - 1900;
@@ -175,7 +181,7 @@ static value date_set_day( value o, value y, value m, value d ) {
 	date = mktime(&t);
 	if( date == -1 )
 		neko_error();
-	return alloc_int32(date);
+	return alloc_int32((int)date);
 }
 
 /**
@@ -186,8 +192,8 @@ static value date_get_day( value o ) {
 	value r;
 	struct tm t;
 	time_t d;
-	val_check(o,int32);
-	d = val_int32(o);
+	val_check(o,any_int);
+	d = val_any_int(o);
 	if( localtime_r(&d,&t) == NULL )
 		neko_error();
 	r = alloc_object(NULL);
@@ -205,8 +211,8 @@ static value date_get_hour( value o ) {
 	value r;
 	struct tm t;
 	time_t d;
-	val_check(o,int32);
-	d = val_int32(o);
+	val_check(o,any_int);
+	d = val_any_int(o);
 	if( localtime_r(&d,&t) == NULL )
 		neko_error();
 	r = alloc_object(NULL);
