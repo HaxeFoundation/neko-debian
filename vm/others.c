@@ -1,19 +1,24 @@
-/* ************************************************************************ */
-/*																			*/
-/*  Neko Virtual Machine													*/
-/*  Copyright (c)2005 Motion-Twin											*/
-/*																			*/
-/* This library is free software; you can redistribute it and/or			*/
-/* modify it under the terms of the GNU Lesser General Public				*/
-/* License as published by the Free Software Foundation; either				*/
-/* version 2.1 of the License, or (at your option) any later version.		*/
-/*																			*/
-/* This library is distributed in the hope that it will be useful,			*/
-/* but WITHOUT ANY WARRANTY; without even the implied warranty of			*/
-/* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU		*/
-/* Lesser General Public License or the LICENSE file for more details.		*/
-/*																			*/
-/* ************************************************************************ */
+/*
+ * Copyright (C)2005-2012 Haxe Foundation
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
 #include <string.h>
 #include <stdio.h>
 #include "neko.h"
@@ -21,8 +26,8 @@
 #include "vm.h"
 
 #define C(x,y)	((x << 8) | y)
+#define FLOAT_FMT	"%.15g"
 
-DEFINE_KIND(k_int32);
 DEFINE_KIND(k_hash);
 
 extern mt_lock *neko_fields_lock;
@@ -50,20 +55,34 @@ EXTERN int val_compare( value a, value b ) {
 	switch( C(val_type(a),val_type(b)) ) {
 	case C(VAL_INT,VAL_INT):
 		return icmp(val_int(a),val_int(b));
+	case C(VAL_INT32,VAL_INT):
+		return icmp(val_int32(a),val_int(b));
+	case C(VAL_INT,VAL_INT32):
+		return icmp(val_int(a),val_int32(b));
+	case C(VAL_INT32,VAL_INT32):
+		return icmp(val_int32(a),val_int32(b));
 	case C(VAL_INT,VAL_FLOAT):
 		return fcmp(val_int(a),val_float(b));
+	case C(VAL_INT32,VAL_FLOAT):
+		return fcmp(val_int32(a),val_float(b));
 	case C(VAL_INT,VAL_STRING):
 		return scmp(tmp_buf,sprintf(tmp_buf,"%d",val_int(a)),val_string(b),val_strlen(b));
+	case C(VAL_INT32,VAL_STRING):
+		return scmp(tmp_buf,sprintf(tmp_buf,"%d",val_int32(a)),val_string(b),val_strlen(b));
 	case C(VAL_FLOAT,VAL_INT):
 		return fcmp(val_float(a),val_int(b));
+	case C(VAL_FLOAT,VAL_INT32):
+		return fcmp(val_float(a),val_int32(b));
 	case C(VAL_FLOAT,VAL_FLOAT):
 		return fcmp(val_float(a),val_float(b));
 	case C(VAL_FLOAT,VAL_STRING):
-		return scmp(tmp_buf,sprintf(tmp_buf,"%.10g",val_float(a)),val_string(b),val_strlen(b));
+		return scmp(tmp_buf,sprintf(tmp_buf,FLOAT_FMT,val_float(a)),val_string(b),val_strlen(b));
 	case C(VAL_STRING,VAL_INT):
 		return scmp(val_string(a),val_strlen(a),tmp_buf,sprintf(tmp_buf,"%d",val_int(b)));
+	case C(VAL_STRING,VAL_INT32):
+		return scmp(val_string(a),val_strlen(a),tmp_buf,sprintf(tmp_buf,"%d",val_int32(b)));
 	case C(VAL_STRING,VAL_FLOAT):
-		return scmp(val_string(a),val_strlen(a),tmp_buf,sprintf(tmp_buf,"%.10g",val_float(b)));
+		return scmp(val_string(a),val_strlen(a),tmp_buf,sprintf(tmp_buf,FLOAT_FMT,val_float(b)));
 	case C(VAL_STRING,VAL_BOOL):
 		return scmp(val_string(a),val_strlen(a),val_bool(b)?"true":"false",val_bool(b)?4:5);
 	case C(VAL_BOOL,VAL_STRING):
@@ -229,7 +248,7 @@ static void val_buffer_rec( buffer b, value v, vlist *stack ) {
 		buffer_append_sub(b,val_string(v),val_strlen(v));
 		break;
 	case VAL_FLOAT:
-		buffer_append_sub(b,buf,sprintf(buf,"%.10g",val_float(v)));
+		buffer_append_sub(b,buf,sprintf(buf,FLOAT_FMT,val_float(v)));
 		break;
 	case VAL_NULL:
 		buffer_append_sub(b,"null",4);
@@ -281,11 +300,11 @@ static void val_buffer_rec( buffer b, value v, vlist *stack ) {
 		}
 		buffer_append_sub(b,"]",1);
 		break;
+	case VAL_INT32:
+		buffer_append_sub(b,buf,sprintf(buf,"%d",val_int32(v)));
+		break;
 	case VAL_ABSTRACT:
-		if( val_is_kind(v,k_int32) )
-			buffer_append_sub(b,buf,sprintf(buf,"%d",val_int32(v)));
-		else
-			buffer_append_sub(b,"#abstract",9);
+		buffer_append_sub(b,"#abstract",9);
 		break;
 	default:
 		buffer_append_sub(b,"#unknown",8);

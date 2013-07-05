@@ -1,9 +1,9 @@
 Source: neko
 Section: interpreters
 Priority: optional
-Maintainer: Jens Peter Secher <jps@debian.org>
-Standards-Version: 3.8.4
-Build-Depends: debhelper (>= 7), quilt, pkg-config, libgc-dev, apache2-threaded-dev, libmysqlclient-dev, libsqlite3-dev, libpcre3-dev, libapr1-dev, libgtk2.0-dev
+Maintainer: Debian QA Group <packages@qa.debian.org>
+Standards-Version: 3.9.4
+Build-Depends: debhelper (>= 7), quilt, pkg-config, libgc-dev, apache2-dev, libmysqlclient-dev, libsqlite3-dev, libpcre3-dev, libapr1-dev, libgtk2.0-dev
 Vcs-Hg: http://hg.debian.org/hg/collab-maint/neko
 Homepage: http://nekovm.org
 

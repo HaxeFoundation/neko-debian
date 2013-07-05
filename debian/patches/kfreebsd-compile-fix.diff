@@ -6,11 +6,11 @@ Reviewed-by: Jens Peter Secher <jps@debian.org>
 Forwarded: yes
 Last-Update: 2009-09-09
 
-Index: neko/libs/ui/ui.c
+Index: b/libs/ui/ui.c
 ===================================================================
---- neko.orig/libs/ui/ui.c	2009-09-09 14:05:50.000000000 +0200
-+++ neko/libs/ui/ui.c	2009-09-09 14:06:53.000000000 +0200
-@@ -28,7 +28,7 @@
+--- a/libs/ui/ui.c
++++ b/libs/ui/ui.c
+@@ -33,7 +33,7 @@
  #	define UIEvent		0xFFFFAA00
  #	define eCall		0x0
  enum { pFunc = 'func' };
@@ -19,7 +19,7 @@ Index: neko/libs/ui/ui.c
  #	include <gtk/gtk.h>
  #	include <glib.h>
  #	include <pthread.h>
-@@ -52,7 +52,7 @@
+@@ -57,7 +57,7 @@
  	HWND wnd;
  #elif defined(NEKO_MAC)
  	pthread_t tid;
@@ -28,7 +28,7 @@ Index: neko/libs/ui/ui.c
  	pthread_t tid;
  	pthread_mutex_t lock;
  #endif
-@@ -98,7 +98,7 @@
+@@ -103,7 +103,7 @@
  	return 0;
  }
  
@@ -37,7 +37,7 @@ Index: neko/libs/ui/ui.c
  
  static gint onSyncCall( gpointer data ) {
  	value *r = (value*)data;
-@@ -142,7 +142,7 @@
+@@ -147,7 +147,7 @@
  	data.tid = pthread_self();
  	EventTypeSpec ets = { UIEvent, eCall };
  	InstallEventHandler(GetApplicationEventTarget(),NewEventHandlerUPP(handleEvents),1,&ets,0,0);
@@ -46,7 +46,7 @@ Index: neko/libs/ui/ui.c
  	g_thread_init(NULL);
  	gdk_threads_init();
  	gtk_init(NULL,NULL);
-@@ -236,7 +236,7 @@
+@@ -241,7 +241,7 @@
  	SetEventParameter(e,pFunc,typeVoidPtr,sizeof(void*),&r);
  	PostEventToQueue(GetMainEventQueue(),e,kEventPriorityStandard);
  	ReleaseEvent(e);

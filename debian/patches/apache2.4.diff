@@ -1,0 +1,100 @@
+Index: b/libs/mod_tora/mod_tora.c
+===================================================================
+--- a/libs/mod_tora/mod_tora.c
++++ b/libs/mod_tora/mod_tora.c
+@@ -50,7 +50,7 @@
+ #	define ap_palloc		apr_palloc
+ #	define LOG_SUCCESS		APR_SUCCESS,
+ #	define REDIRECT			HTTP_MOVED_TEMPORARILY
+-#	define REMOTE_ADDR(c)	c->remote_addr->sa.sin.sin_addr
++#	define REMOTE_ADDR(c)	c->client_addr->sa.sin.sin_addr
+ #else
+ #	define LOG_SUCCESS
+ #	define REMOTE_ADDR(c)	c->remote_addr.sin_addr
+@@ -148,7 +148,7 @@
+ 		do_print(c,"Error : ",8);
+ 		do_print(c,msg,(int)strlen(msg));
+ 	} else
+-		ap_log_rerror(__FILE__, __LINE__, APLOG_WARNING, LOG_SUCCESS c->r, "[mod_tora] %s", msg);
++		ap_log_rerror(APLOG_MARK, APLOG_WARNING, LOG_SUCCESS c->r, "[mod_tora] %s", msg);
+ }
+ 
+ static void log_error( mcontext *c, const char *msg ) {
+@@ -232,7 +232,7 @@
+ 		if( config.proxy_mode ) {
+ 			const char *xff = ap_table_get(r->headers_in,"X-Forwarded-For");
+ 			if( xff == NULL )
+-				infos.client_ip = r->connection->remote_ip;
++				infos.client_ip = r->connection->client_ip;
+ 			else {
+ 				char tmp;
+ 				char *xend = (char*)xff + strlen(xff) - 1;
+@@ -319,7 +319,7 @@
+ 	else if( strcmp(code,"PORT_MAX") == 0 ) config.port_max = value;
+ 	else if( strcmp(code,"POST_SIZE") == 0 ) config.max_post_size = value;
+ 	else if( strcmp(code,"PROXY_MODE") == 0 ) config.proxy_mode = value;
+-	else ap_log_error(__FILE__,__LINE__,APLOG_WARNING,LOG_SUCCESS cmd->server,"Unknown ModTora configuration command '%s'",code);
++	else ap_log_error(APLOG_MARK,APLOG_WARNING,LOG_SUCCESS cmd->server,"Unknown ModTora configuration command '%s'",code);
+ 	free(code);
+ 	return NULL;
+ }
+Index: b/libs/mod_neko/mod_neko.c
+===================================================================
+--- a/libs/mod_neko/mod_neko.c
++++ b/libs/mod_neko/mod_neko.c
+@@ -44,7 +44,7 @@
+ 
+ #define apache_error(level,request,message)	\
+ 	ap_rprintf(request,"<b>Error</b> : %s",message); \
+-	ap_log_rerror(__FILE__, __LINE__, level, LOG_SUCCESS request, "[mod_neko error] %s", message)
++	ap_log_rerror(APLOG_MARK, level, LOG_SUCCESS request, "[mod_neko error] %s", message)
+ 
+ typedef struct cache {
+ 	value file;
+@@ -385,7 +385,7 @@
+ 	if( exc ) {
+ 		buffer b = alloc_buffer(NULL);
+ 		val_buffer(b,exc);
+-		ap_log_error(__FILE__,__LINE__,APLOG_WARNING,LOG_SUCCESS serv,"Failed to preload module '%s' : %s",name,val_string(buffer_to_string(b)));
++		ap_log_error(APLOG_MARK,APLOG_WARNING,LOG_SUCCESS serv,"Failed to preload module '%s' : %s",name,val_string(buffer_to_string(b)));
+ 	}
+ 	neko_vm_select(NULL);
+ }
+@@ -415,7 +415,7 @@
+ 	else if( strcmp(code,"STATS") == 0 ) config.use_stats = value;
+ 	else if( strcmp(code,"PRIM_STATS") == 0 ) config.use_prim_stats = value;
+ 	else if( strcmp(code,"PRELOAD") == 0 ) preload_module(args,cmd->server);
+-	else ap_log_error(__FILE__,__LINE__,APLOG_WARNING,LOG_SUCCESS cmd->server,"Unknown ModNeko configuration command '%s'",code);
++	else ap_log_error(APLOG_MARK,APLOG_WARNING,LOG_SUCCESS cmd->server,"Unknown ModNeko configuration command '%s'",code);
+ 	free(code);
+ 	return NULL;
+ }
+Index: b/libs/mod_neko/cgi.c
+===================================================================
+--- a/libs/mod_neko/cgi.c
++++ b/libs/mod_neko/cgi.c
+@@ -572,9 +572,9 @@
+ 	mcontext *c = CONTEXT();
+ 	val_check(message, string);
+ #ifdef APACHE_2_X
+-	ap_log_rerror(__FILE__, __LINE__, APLOG_NOTICE, APR_SUCCESS, c->r, "[mod_neko] %s", val_string(message));
++	ap_log_rerror(APLOG_MARK, APLOG_NOTICE, APR_SUCCESS, c->r, "[mod_neko] %s", val_string(message));
+ #else
+-	ap_log_rerror(__FILE__, __LINE__, APLOG_NOTICE, c->r, "[mod_neko] %s", val_string(message));
++	ap_log_rerror(APLOG_MARK, APLOG_NOTICE, c->r, "[mod_neko] %s", val_string(message));
+ #endif
+ 	return val_null;
+ }
+Index: b/libs/mod_neko/mod_neko.h
+===================================================================
+--- a/libs/mod_neko/mod_neko.h
++++ b/libs/mod_neko/mod_neko.h
+@@ -60,7 +60,7 @@
+ 
+ #ifdef STANDARD20_MODULE_STUFF
+ #	define APACHE_2_X
+-#	define REMOTE_ADDR(c)	c->remote_addr->sa.sin.sin_addr
++#	define REMOTE_ADDR(c)	c->client_addr->sa.sin.sin_addr
+ #else
+ #	define REMOTE_ADDR(c)	c->remote_addr.sin_addr
+ #endif

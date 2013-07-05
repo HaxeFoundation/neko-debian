@@ -1,19 +1,24 @@
-/* ************************************************************************ */
-/*																			*/
-/*  Neko Standard Library													*/
-/*  Copyright (c)2005 Motion-Twin											*/
-/*																			*/
-/* This library is free software; you can redistribute it and/or			*/
-/* modify it under the terms of the GNU Lesser General Public				*/
-/* License as published by the Free Software Foundation; either				*/
-/* version 2.1 of the License, or (at your option) any later version.		*/
-/*																			*/
-/* This library is distributed in the hope that it will be useful,			*/
-/* but WITHOUT ANY WARRANTY; without even the implied warranty of			*/
-/* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU		*/
-/* Lesser General Public License or the LICENSE file for more details.		*/
-/*																			*/
-/* ************************************************************************ */
+/*
+ * Copyright (C)2005-2012 Haxe Foundation
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
 #include <string.h>
 #include <neko_mod.h>
 
@@ -119,7 +124,7 @@ static void lookup_serialize_field( value data, field id, void *v ) {
 
 static bool write_ref( sbuffer *b, value o, value *serialize ) {
 	odatalist *d = b->refs, *prev = NULL;
-	while( d != NULL ) {		
+	while( d != NULL ) {
 		if( d->data < o ) {
 			prev = d;
 			d = d->left;
@@ -197,7 +202,7 @@ void serialize_rec( sbuffer *b, value o ) {
 	case VAL_OBJECT:
 		{
 			value s;
-			if( !write_ref(b,o,&s) ) {			
+			if( !write_ref(b,o,&s) ) {
 				if( s != NULL ) {
 					// reference was not written
 					if( !val_is_function(s) || (val_fun_nargs(s) != 0 && val_fun_nargs(s) != VAR_ARGS) )
@@ -255,12 +260,12 @@ void serialize_rec( sbuffer *b, value o ) {
 			serialize_rec(b,((vfunction*)o)->env);
 		}
 		break;
+	case VAL_INT32:
+		write_char(b,'I');
+		write_int(b,val_int32(o));
+		break;
 	case VAL_ABSTRACT:
-		if( val_is_kind(o,k_int32) ) {
-			write_char(b,'I');
-			write_int(b,val_int32(o));
-			break;
-		} else if( val_is_kind(o,k_hash) ) {
+		if( val_is_kind(o,k_hash) ) {
 			int i;
 			vhash *h = val_hdata(o);
 			write_char(b,'h');
@@ -364,7 +369,7 @@ static value unserialize_rec( sbuffer *b, value loader ) {
 		{
 			int l = read_int(b);
 			value v;
-			if( l < 0 || l >= 0x1000000 )
+			if( l < 0 || l > max_string_size )
 				ERROR();
 			v = alloc_empty_string(l);
 			add_ref(b,v);
@@ -409,7 +414,7 @@ static value unserialize_rec( sbuffer *b, value loader ) {
 			int n = read_int(b);
 			value o;
 			value *t;
-			if( n < 0 || n >= 0x100000 )
+			if( n < 0 || n > max_array_size )
 				ERROR();
 			o = alloc_array(n);
 			t = val_array_ptr(o);

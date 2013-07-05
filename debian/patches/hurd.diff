@@ -20,11 +20,11 @@ Bug-Debian: http://bugs.debian.org/626260
 Forwarded: Nicolas Cannasse <ncannasse@motion-twin.com>
 Last-Update: 2011-05-15
 
-Index: neko/vm/neko.h
+Index: b/vm/neko.h
 ===================================================================
---- neko.orig/vm/neko.h	2011-05-15 19:13:09.000000000 +0200
-+++ neko/vm/neko.h	2011-05-15 19:13:17.000000000 +0200
-@@ -22,7 +22,7 @@
+--- a/vm/neko.h
++++ b/vm/neko.h
+@@ -27,7 +27,7 @@
  #	define NEKO_WINDOWS
  #endif
  
@@ -33,7 +33,7 @@ Index: neko/vm/neko.h
  #	define NEKO_MAC
  #endif
  
-@@ -38,6 +38,10 @@
+@@ -43,6 +43,10 @@
  #	define NEKO_BSD
  #endif
  
@@ -44,7 +44,7 @@ Index: neko/vm/neko.h
  // COMPILER/PROCESSOR FLAGS
  #if defined(__GNUC__)
  #	define NEKO_GCC
-@@ -63,7 +67,7 @@
+@@ -70,7 +74,7 @@
  #	define NEKO_64BITS
  #endif
  
@@ -53,11 +53,11 @@ Index: neko/vm/neko.h
  #	define NEKO_POSIX
  #endif
  
-Index: neko/libs/std/sys.c
+Index: b/libs/std/sys.c
 ===================================================================
---- neko.orig/libs/std/sys.c	2011-05-15 19:13:05.000000000 +0200
-+++ neko/libs/std/sys.c	2011-05-15 19:13:17.000000000 +0200
-@@ -194,6 +194,8 @@
+--- a/libs/std/sys.c
++++ b/libs/std/sys.c
+@@ -200,6 +200,8 @@
  	return alloc_string("BSD");
  #elif defined(NEKO_MAC)
  	return alloc_string("Mac");
@@ -66,7 +66,7 @@ Index: neko/libs/std/sys.c
  #else
  #error Unknow system string
  #endif
-@@ -504,6 +506,14 @@
+@@ -537,6 +539,14 @@
  	if( GetFullPathName(val_string(path),MAX_PATH+1,buf,NULL) == 0 )
  		neko_error();
  	return alloc_string(buf);
@@ -81,7 +81,7 @@ Index: neko/libs/std/sys.c
  #else
  	char buf[PATH_MAX];
  	val_check(path,string);
-@@ -529,7 +539,7 @@
+@@ -562,7 +572,7 @@
  	if( _NSGetExecutablePath(path, &path_len) )
  		neko_error();
  	return alloc_string(path);
@@ -90,7 +90,7 @@ Index: neko/libs/std/sys.c
  	const char *p = getenv("_");
  	if( p != NULL )
  		return alloc_string(p);
-@@ -541,6 +551,11 @@
+@@ -574,6 +584,11 @@
  	    path[length] = '\0';
  		return alloc_string(path);
  	}
@@ -102,11 +102,11 @@ Index: neko/libs/std/sys.c
  #endif
  }
  
-Index: neko/libs/common/osdef.h
+Index: b/libs/common/osdef.h
 ===================================================================
---- neko.orig/libs/common/osdef.h	2011-05-15 19:03:14.000000000 +0200
-+++ neko/libs/common/osdef.h	2011-05-15 19:13:17.000000000 +0200
-@@ -25,7 +25,7 @@
+--- a/libs/common/osdef.h
++++ b/libs/common/osdef.h
+@@ -26,7 +26,7 @@
  #	define OS_WINDOWS
  #endif
  
@@ -115,7 +115,7 @@ Index: neko/libs/common/osdef.h
  #	define OS_MAC
  #endif
  
-@@ -37,7 +37,11 @@
+@@ -38,7 +38,11 @@
  #	define OS_BSD
  #endif
  
@@ -128,11 +128,11 @@ Index: neko/libs/common/osdef.h
  #	define OS_POSIX
  #endif
  
-Index: neko/vm/main.c
+Index: b/vm/main.c
 ===================================================================
---- neko.orig/vm/main.c	2011-05-15 19:09:30.000000000 +0200
-+++ neko/vm/main.c	2011-05-15 19:13:17.000000000 +0200
-@@ -74,7 +74,7 @@
+--- a/vm/main.c
++++ b/vm/main.c
+@@ -79,7 +79,7 @@
  	}
  	path[length] = '\0';
  	return path;
@@ -141,7 +141,7 @@ Index: neko/vm/main.c
  	static char path[1024];
  	int length = readlink("/proc/self/exe", path, sizeof(path));
  	if( length < 0 || length >= 1024 ) {
-@@ -85,6 +85,8 @@
+@@ -90,6 +90,8 @@
  	}
  	path[length] = '\0';
  	return path;

@@ -1,19 +1,24 @@
-/* ************************************************************************ */
-/*																			*/
-/*  Neko Standard Library													*/
-/*  Copyright (c)2005 Motion-Twin											*/
-/*																			*/
-/* This library is free software; you can redistribute it and/or			*/
-/* modify it under the terms of the GNU Lesser General Public				*/
-/* License as published by the Free Software Foundation; either				*/
-/* version 2.1 of the License, or (at your option) any later version.		*/
-/*																			*/
-/* This library is distributed in the hope that it will be useful,			*/
-/* but WITHOUT ANY WARRANTY; without even the implied warranty of			*/
-/* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU		*/
-/* Lesser General Public License or the LICENSE file for more details.		*/
-/*																			*/
-/* ************************************************************************ */
+/*
+ * Copyright (C)2005-2012 Haxe Foundation
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
 #include <neko.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -35,6 +40,7 @@
 #	include <termios.h>
 #	include <sys/time.h>
 #	include <sys/times.h>
+#	include <sys/wait.h>
 #	include <xlocale.h>
 #endif
 
@@ -223,7 +229,12 @@ static value sys_command( value cmd ) {
 	val_check(cmd,string);
 	if( val_strlen(cmd) == 0 )
 		return alloc_int(-1);
+#ifdef NEKO_WINDOWS
 	return alloc_int( system(val_string(cmd)) );
+#else
+	int status = system(val_string(cmd));
+	return alloc_int( WEXITSTATUS(status) | (WTERMSIG(status) << 8) );
+#endif
 }
 
 /**
@@ -278,7 +289,7 @@ static value sys_rename( value path, value newname ) {
 }
 
 #define STATF(f) alloc_field(o,val_id(#f),alloc_int(s.st_##f))
-#define STATF32(f) alloc_field(o,val_id(#f),alloc_int32(s.st_##f))
+#define STATF32(f) alloc_field(o,val_id(#f),alloc_int32((int)s.st_##f))
 
 /**
 	sys_stat : string -> {
@@ -424,6 +435,28 @@ static value sys_cpu_time() {
 	struct tms t;
 	times(&t);
 	return alloc_float( ((tfloat)(t.tms_utime + t.tms_stime)) / CLK_TCK );
+#endif
+}
+
+/**
+	sys_thread_cpu_time : void -> float
+	<doc>Return the most accurate CPU time spent in user mode in the current thread (in seconds)</doc>
+**/
+static value sys_thread_cpu_time() {
+#if defined(NEKO_WINDOWS)
+	FILETIME unused;
+	FILETIME utime;
+	if( !GetThreadTimes(GetCurrentThread(),&unused,&unused,&unused,&utime) )
+		neko_error();
+	return alloc_float( ((tfloat)utime.dwHighDateTime) * 65.536 * 6.5536 + (((tfloat)utime.dwLowDateTime) / 10000000) );
+#elif defined(NEKO_MAC)
+	val_throw(alloc_string("sys_thread_cpu_time not implmented on OSX"));
+	return val_null;
+#else
+	struct timespec t;
+	if( clock_gettime(CLOCK_THREAD_CPUTIME_ID,&t) )
+		neko_error();
+	return alloc_float( t.tv_sec + t.tv_nsec * 1e-9 );
 #endif
 }
 
@@ -635,6 +668,18 @@ static value sys_get_pid() {
 #	endif
 }
 
+/**
+	win_env_changed : void -> void
+	<doc>Tell that the windows envionment variables were changed in the registry</doc>
+**/
+static value win_env_changed() {
+#	ifdef NEKO_WINDOWS
+	DWORD unused;
+	SendMessageTimeout(HWND_BROADCAST,WM_SETTINGCHANGE, 0, (LPARAM)"Environment", SMTO_ABORTIFHUNG, 5000, &unused );
+#	endif
+	return val_null;
+}
+
 DEFINE_PRIM(get_env,1);
 DEFINE_PRIM(put_env,2);
 DEFINE_PRIM(set_time_locale,1);
@@ -661,5 +706,8 @@ DEFINE_PRIM(sys_exe_path,0);
 DEFINE_PRIM(sys_file_type,1);
 DEFINE_PRIM(sys_getch,1);
 DEFINE_PRIM(sys_get_pid,0);
+DEFINE_PRIM(sys_thread_cpu_time,0);
+
+DEFINE_PRIM(win_env_changed,0);
 
 /* ************************************************************************ */

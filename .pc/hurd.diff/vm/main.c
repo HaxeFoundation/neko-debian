@@ -1,19 +1,24 @@
-/* ************************************************************************ */
-/*																			*/
-/*  Neko Virtual Machine													*/
-/*  Copyright (c)2005 Motion-Twin											*/
-/*																			*/
-/* This library is free software; you can redistribute it and/or			*/
-/* modify it under the terms of the GNU Lesser General Public				*/
-/* License as published by the Free Software Foundation; either				*/
-/* version 2.1 of the License, or (at your option) any later version.		*/
-/*																			*/
-/* This library is distributed in the hope that it will be useful,			*/
-/* but WITHOUT ANY WARRANTY; without even the implied warranty of			*/
-/* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU		*/
-/* Lesser General Public License or the LICENSE file for more details.		*/
-/*																			*/
-/* ************************************************************************ */
+/*
+ * Copyright (C)2005-2012 Haxe Foundation
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -98,8 +103,7 @@ int neko_has_embedded_module( neko_vm *vm ) {
 	if( self == NULL )
 		return 0;
 	fseek(self,-8,SEEK_END);
-	fread(id,1,8,self);
-	if( id[0] != 'N' || id[1] != 'E' || id[2] != 'K' || id[3] != 'O' ) {
+	if( fread(id,1,8,self) != 8 || id[0] != 'N' || id[1] != 'E' || id[2] != 'K' || id[3] != 'O' ) {
 		fclose(self);
 		return 0;
 	}
@@ -239,6 +243,12 @@ int main( int argc, char *argv[] ) {
 				neko_stats_measure(vm,"total",1);
 				continue;
 			}
+			if( strcmp(argv[1],"-version") == 0 ) {
+				argc--;
+				argv++;
+				printf("%d.%d.%d",NEKO_VERSION/100,(NEKO_VERSION/10)%10,NEKO_VERSION%10);
+				return 0;
+			}
 			break;
 		}
 #		ifdef NEKO_POSIX
@@ -256,7 +266,7 @@ int main( int argc, char *argv[] ) {
 #			ifdef NEKO_STANDALONE
 			report(vm,alloc_string("No embedded module in this executable"),0);
 #			else
-			printf("NekoVM %d.%d.%d (c)2005-2009 Motion-Twin\n  Usage : neko <file>\n",NEKO_VERSION/100,(NEKO_VERSION/10)%10,NEKO_VERSION%10);
+			printf("NekoVM %d.%d.%d (c)2005-2013 Haxe Foundation\n  Usage : neko <file>\n",NEKO_VERSION/100,(NEKO_VERSION/10)%10,NEKO_VERSION%10);
 #			endif
 			mload = NULL;
 			r = 1;

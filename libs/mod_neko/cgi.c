@@ -1,19 +1,24 @@
-/* ************************************************************************ */
-/*																			*/
-/*  Neko Apache Library														*/
-/*  Copyright (c)2005 Motion-Twin											*/
-/*																			*/
-/* This library is free software; you can redistribute it and/or			*/
-/* modify it under the terms of the GNU Lesser General Public				*/
-/* License as published by the Free Software Foundation; either				*/
-/* version 2.1 of the License, or (at your option) any later version.		*/
-/*																			*/
-/* This library is distributed in the hope that it will be useful,			*/
-/* but WITHOUT ANY WARRANTY; without even the implied warranty of			*/
-/* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU		*/
-/* Lesser General Public License or the LICENSE file for more details.		*/
-/*																			*/
-/* ************************************************************************ */
+/*
+ * Copyright (C)2005-2012 Haxe Foundation
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
 #include <neko.h>
 #include <string.h>
 #include "mod_neko.h"
@@ -123,7 +128,7 @@ static value get_host_name() {
 	<doc>Get the connected client IP</doc>
 **/
 static value get_client_ip() {
-	return alloc_string( CONTEXT()->r->connection->remote_ip );
+	return alloc_string( inet_ntoa(REMOTE_ADDR(CONTEXT()->r->connection)) );
 }
 
 /**
@@ -449,8 +454,11 @@ static value get_params() {
 		parse_get(&p,args);
 
 	// PARSE "POST" PARAMS
-	if( c->post_data != NULL )
-		parse_get(&p,val_string(c->post_data));
+	if( c->post_data != NULL ) {
+		const char *ctype = ap_table_get(c->r->headers_in,"Content-Type");
+		if( ctype == NULL || strstr(ctype,"urlencoded") != NULL )
+			parse_get(&p,val_string(c->post_data));
+	}
 
 	return p;
 }
@@ -564,9 +572,9 @@ static value log_message( value message ) {
 	mcontext *c = CONTEXT();
 	val_check(message, string);
 #ifdef APACHE_2_X
-	ap_log_rerror(__FILE__, __LINE__, APLOG_NOTICE, APR_SUCCESS, c->r, "[mod_neko] %s", val_string(message));
+	ap_log_rerror(APLOG_MARK, APLOG_NOTICE, APR_SUCCESS, c->r, "[mod_neko] %s", val_string(message));
 #else
-	ap_log_rerror(__FILE__, __LINE__, APLOG_NOTICE, c->r, "[mod_neko] %s", val_string(message));
+	ap_log_rerror(APLOG_MARK, APLOG_NOTICE, c->r, "[mod_neko] %s", val_string(message));
 #endif
 	return val_null;
 }

@@ -1,18 +1,25 @@
 /*
- *  Neko Web Server for development
- *  Copyright (c)2006 Motion-Twin
+ * Copyright (C)2005-2012 Haxe Foundation
  *
- *  This library is free software; you can redistribute it and/or
- *  modify it under the terms of the GNU Lesser General Public
- *  License as published by the Free Software Foundation; either
- *  version 2.1 of the License, or (at your option) any later version.
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
  *
- *  This library is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- *  Lesser General Public License or the LICENSE file for more details.
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
  */
-
+ 
 type main_function;
 
 type client {
@@ -127,6 +134,9 @@ var http_request_method = Lexer.build [
 	("PUT", function(l) { MethodCustom "PUT" });
 	("HEAD", function(l) { MethodCustom "HEAD" });
 	("DELETE", function(l) { MethodCustom "DELETE" });
+	("TRACE",function(l) { MethodCustom "TRACE" });
+	("CONNECT",function(l) { MethodCustom "CONNECT" });
+	("OPTIONS",function(l) { MethodCustom "OPTIONS" });
 ] invalid_char;
 
 var http_request_url = Lexer.build [
@@ -172,9 +182,9 @@ function header(name,headers) {
 	}
 }
 
-function parse_http_request(in) {
+function parse_http_request(c) {
 	var l = Lexer.create();
-	Lexer.input l "http-stream" in 1 0;
+	Lexer.input l "http-stream" c.in 1 0;
 	var meth = Lexer.token l http_request_method;
 	var url = Lexer.token l http_request_url;
 	var version = Lexer.token l http_request_version;
@@ -183,7 +193,13 @@ function parse_http_request(in) {
 	var ctype = header "Content-Type" headers;
 	var post_data, params = if meth == MethodPost && ctype != Some "multipart/form-data" then {
 		var len = match header "Content-Length" headers { None -> 0 | Some len -> int len };
-		if len >= (1 << 18) then error "max post data exceeded";
+		if len >= (1 << 18) then {
+			IO.write c.out "HTTP/1.1 200 OK\r\n";
+			IO.write c.out "\n\n";
+			IO.write c.out "Max post data exceeded";
+			printf "Max post data exceeded (%d bytes)\n" len;
+			throw IO.Eof;
+		}
 		var b = Buffer.create();
 		var i = &0;
 		while *i < len {
@@ -389,7 +405,7 @@ function init_mod_neko() {
 		Net.host_to_string fst(Net.socket_host client().sock);
 	});
 	no_param "get_client_ip" (function() {
-		Net.host_to_string fst(Net.socket_host client().sock);
+		Net.host_to_string fst(Net.socket_peer client().sock);
 	});
 	no_param "get_uri" (function() {
 		var r = request();
@@ -536,7 +552,7 @@ function config(c,r) {
 }
 
 function client_msg(c) {
-	var r = parse_http_request c.in;
+	var r = parse_http_request c;
 	cur_client := Some c;
 	if r.res == "/server:config" then
 		config(c,r)
@@ -554,7 +570,7 @@ function client_msg(c) {
 			mod_neko c r file
 		} else {
 			// directly send the file content
-			IO.write c.out "HTTP/1.x 200 OK\r\n";
+			IO.write c.out "HTTP/1.1 200 OK\r\n";
 			var ctype = try { List.assoc ext mime } catch { Not_found -> "unknown/unknown" };
 			var file_size : int = neko "$loader.loadprim('std@sys_stat',1)(file).size";
 			IO.write c.out ("Content-Type: " + ctype + "\r\n");
@@ -575,22 +591,23 @@ function client_msg(c) {
 			IO.close_in fin
 		}
 	}
-	IO.close_out c.out;
 }
 
 function client_msg_safe(c) {
 	try {
 		client_msg(c);
 	} catch {
+		| Invalid_char -> printf "Invalid char reveived\n" ();
 		| IO.Eof -> printf "Connection aborted\n" ();
 		| Neko_error e when Reflect.value e == Reflect.VString "std@socket_send" -> printf "Sending file aborted\n" ();
 	}
+	Net.socket_close c.sock;
 	neko "$loader.loadprim('std@run_gc',1)(true)";
 	false
 }
 
 function init() {
-	var head = "Neko Web Server v1.0 - (c)2006 Motion-Twin";
+	var head = "Neko Web Server v1.0 - (c)2006-2013 Haxe Foundation";
 	var port = &2000;
 	var host = &"localhost";
 	var decl = [

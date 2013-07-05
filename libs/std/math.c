@@ -1,19 +1,24 @@
-/* ************************************************************************ */
-/*																			*/
-/*  Neko Standard Library													*/
-/*  Copyright (c)2005 Motion-Twin											*/
-/*																			*/
-/* This library is free software; you can redistribute it and/or			*/
-/* modify it under the terms of the GNU Lesser General Public				*/
-/* License as published by the Free Software Foundation; either				*/
-/* version 2.1 of the License, or (at your option) any later version.		*/
-/*																			*/
-/* This library is distributed in the hope that it will be useful,			*/
-/* but WITHOUT ANY WARRANTY; without even the implied warranty of			*/
-/* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU		*/
-/* Lesser General Public License or the LICENSE file for more details.		*/
-/*																			*/
-/* ************************************************************************ */
+/*
+ * Copyright (C)2005-2012 Haxe Foundation
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
 #include <neko.h>
 #include <stdlib.h>
 #include <math.h>
@@ -26,11 +31,6 @@
 	</p>
 	</doc>
 **/
-
-#if defined(NEKO_VCC) && !defined(NEKO_STANDALONE)
-	long _ftol( double f );
-	long _ftol2( double f) { return _ftol(f); };
-#endif
 
 #define MATH_PRIM(f) \
 	value math_##f( value n ) { \
@@ -58,8 +58,8 @@ static value math_pow( value a, value b ) {
 	val_check(a,number);
 	val_check(b,number);
 	r = (tfloat)pow(val_number(a),val_number(b));
-	if( (int)r == r && fabs(r) < (1 << 30) )
-		return alloc_int((int)r);
+	if( (int)r == r && fabs(r) < (1 << 31) )
+		return alloc_best_int((int)r);
 	return alloc_float(r);
 }
 
@@ -71,6 +71,8 @@ static value math_abs( value n ) {
 	switch( val_type(n) ) {
 	case VAL_INT:
 		return alloc_int( abs(val_int(n)) );
+	case VAL_INT32:
+		return alloc_int32( abs(val_int32(n)) );
 	case VAL_FLOAT:
 		return alloc_float( fabs(val_float(n)) ); 
 	default:
@@ -85,9 +87,10 @@ static value math_abs( value n ) {
 static value math_ceil( value n ) {
 	switch( val_type(n) ) {
 	case VAL_INT:
+	case VAL_INT32:
 		return n;
 	case VAL_FLOAT:
-		return alloc_int( (int)ceil(val_float(n)) );
+		return alloc_best_int( (int)ceil(val_float(n)) );
 	default:
 		neko_error();
 	}
@@ -100,9 +103,10 @@ static value math_ceil( value n ) {
 static value math_floor( value n ) {
 	switch( val_type(n) ) {
 	case VAL_INT:
+	case VAL_INT32:
 		return n;
 	case VAL_FLOAT:
-		return alloc_int( (int)floor(val_float(n)) );
+		return alloc_best_int( (int)floor(val_float(n)) );
 	default:
 		neko_error();
 	}
@@ -115,9 +119,10 @@ static value math_floor( value n ) {
 static value math_round( value n ) {
 	switch( val_type(n) ) {
 	case VAL_INT:
+	case VAL_INT32:
 		return n;
 	case VAL_FLOAT:
-		return alloc_int( (int)floor(val_float(n) + 0.5) );
+		return alloc_best_int( (int)floor(val_float(n) + 0.5) );
 	default:
 		neko_error();
 	}
@@ -130,6 +135,7 @@ static value math_round( value n ) {
 static value math_fceil( value n ) {
 	switch( val_type(n) ) {
 	case VAL_INT:
+	case VAL_INT32:
 		return n;
 	case VAL_FLOAT:
 		return alloc_float( ceil(val_float(n)) );
@@ -145,6 +151,7 @@ static value math_fceil( value n ) {
 static value math_ffloor( value n ) {
 	switch( val_type(n) ) {
 	case VAL_INT:
+	case VAL_INT32:
 		return n;
 	case VAL_FLOAT:
 		return alloc_float( floor(val_float(n)) );
@@ -160,6 +167,7 @@ static value math_ffloor( value n ) {
 static value math_fround( value n ) {
 	switch( val_type(n) ) {
 	case VAL_INT:
+	case VAL_INT32:
 		return n;
 	case VAL_FLOAT:
 		return alloc_float( floor(val_float(n) + 0.5) );
@@ -175,11 +183,12 @@ static value math_fround( value n ) {
 static value math_int( value n ) {
 	switch( val_type(n) ) {
 	case VAL_INT:
+	case VAL_INT32:
 		return n;
 	case VAL_FLOAT:
 		{
 			tfloat v = val_float(n);
-			return alloc_int( (int)((n < 0) ? ceil(v) : floor(v)) );
+			return alloc_best_int( (int)((n < 0) ? ceil(v) : floor(v)) );
 		}
 	default:
 		neko_error();

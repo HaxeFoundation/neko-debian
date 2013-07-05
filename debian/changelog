@@ -1,3 +1,16 @@
+neko (2.0.0-1) unstable; urgency=low
+
+  * QA upload.
+  * New upstream version.
+  * Properly orphan the package (see #628939).
+  * Build-depend on apache2-dev, fix build errors with apache2.4.
+    Closes: #666858.
+  * Fix build failure with ld --as-needed. Closes: #641613.
+  * Fix some lintian warnings.
+  * TODO: Pass build flags to submodules. 
+
+ -- Matthias Klose <doko@debian.org>  Fri, 05 Jul 2013 14:47:28 +0200
+
 neko (1.8.1-6) unstable; urgency=low
 
   * Include patch to fix compile errors on hurd-i386, thanks to Pino
