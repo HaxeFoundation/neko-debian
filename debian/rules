@@ -34,6 +34,7 @@ binary-indep: build
 	dh_testdir
 	dh_testroot
 	dh_install -plibapache2-mod-neko -pneko-dev
+	dh_apache2 -plibapache2-mod-neko -e
 	dh_installdocs -plibapache2-mod-neko -pneko-dev
 	dh_installchangelogs -plibapache2-mod-neko -pneko-dev CHANGES
 	dh_compress -plibapache2-mod-neko -pneko-dev

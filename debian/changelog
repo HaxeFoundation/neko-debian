@@ -1,3 +1,11 @@
+neko (2.0.0-3) unstable; urgency=low
+
+  * QA upload.
+  * Convert to dh-apache2.
+  * Switch MPM to prefork in postinst; do not depend on apache2-mpm-prefork.
+
+ -- Colin Watson <cjwatson@debian.org>  Sat, 13 Jul 2013 15:30:16 +0100
+
 neko (2.0.0-2) unstable; urgency=low
 
   * QA upload.
