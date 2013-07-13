@@ -6,10 +6,20 @@ ENABLE2=/usr/sbin/a2enmod
 
 case "$1" in
     configure)
-        ## Register with Apache 2.2, if present.
-        if [ -x $ENABLE2 ]; then
-            ## Enable neko module.
-            $ENABLE2 neko
+        ## Register with Apache 2, if present.
+        if [ -e /usr/share/apache2/apache2-maintscript-helper ]; then
+            . /usr/share/apache2/apache2-maintscript-helper
+
+            ## mod_neko requires the prefork MPM.
+            if [ "$(a2query -M)" != prefork ]; then
+                if apache2_switch_mpm prefork; then
+                    apache2_invoke enmod neko
+                else
+                    apache2_msg err "Could not switch to prefork; not enabling mod_neko."
+                fi
+            else
+                apache2_invoke enmod neko
+            fi
         fi
         ;;
     abort-upgrade|abort-remove|abort-deconfigure)

@@ -3,7 +3,7 @@ Section: interpreters
 Priority: optional
 Maintainer: Debian QA Group <packages@qa.debian.org>
 Standards-Version: 3.9.4
-Build-Depends: debhelper (>= 7), quilt, pkg-config, libgc-dev, apache2-dev, libmysqlclient-dev, libsqlite3-dev, libpcre3-dev, libapr1-dev, libgtk2.0-dev
+Build-Depends: debhelper (>= 7), quilt, pkg-config, libgc-dev, dh-apache2, apache2-dev, libmysqlclient-dev, libsqlite3-dev, libpcre3-dev, libapr1-dev, libgtk2.0-dev
 Vcs-Hg: http://hg.debian.org/hg/collab-maint/neko
 Homepage: http://nekovm.org
 
@@ -57,7 +57,7 @@ Description: Lightweight virtual machine - compiler and tools
 Package: libapache2-mod-neko
 Architecture: all
 Section: httpd
-Depends: neko (>= ${source:Version}), ${misc:Depends}, apache2-mpm-prefork
+Depends: neko (>= ${source:Version}), ${misc:Depends}
 Description: Apache module for running server-side Neko programs
  Neko provides a common runtime for several different languages,
  including JavaScript and haXe.
