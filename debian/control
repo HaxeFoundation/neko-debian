@@ -1,10 +1,11 @@
 Source: neko
 Section: interpreters
 Priority: optional
-Maintainer: Debian QA Group <packages@qa.debian.org>
-Standards-Version: 3.9.4
+Maintainer: Andy Li <andy@onthewings.net>
+Standards-Version: 3.9.6
 Build-Depends: debhelper (>= 7), quilt, pkg-config, libgc-dev, dh-apache2, apache2-dev, libmysqlclient-dev, libsqlite3-dev, libpcre3-dev, libapr1-dev, libgtk2.0-dev
-Vcs-Hg: http://hg.debian.org/hg/collab-maint/neko
+Vcs-Git: https://github.com/HaxeFoundation/neko-debian.git
+Vcs-Browser: https://github.com/HaxeFoundation/neko-debian
 Homepage: http://nekovm.org
 
 Package: libneko0
@@ -51,7 +52,7 @@ Description: Lightweight virtual machine - compiler and tools
  compiler as standalone commandline executable separated from the
  virtual machine, or as a Neko library to perform compile-and-run for
  interactive languages.
- . 
+ .
  Neko was written by Nicolas Cannasse.
 
 Package: libapache2-mod-neko
