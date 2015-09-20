@@ -1,0 +1,37 @@
+#!bash
+#
+# bash/zsh completion support for neko/nekotools/nekoml/nekoc.
+#
+# This is free and unencumbered software released into the public domain.
+#
+# Anyone is free to copy, modify, publish, use, compile, sell, or
+# distribute this software, either in source code form or as a compiled
+# binary, for any purpose, commercial or non-commercial, and by any
+# means.
+
+__neko(){
+	local cur=${COMP_WORDS[COMP_CWORD]}
+	COMPREPLY=($(compgen -f -X "!*.n" -- "${cur}"))
+}
+complete -d -X '.[^./]*' -F __neko neko
+
+__nekotools(){
+	local cur=${COMP_WORDS[COMP_CWORD]}
+	#local prev=${COMP_WORDS[COMP_CWORD-1]}
+	local opts="boot server"
+	# TODO 2nd level args
+	COMPREPLY=($(compgen -W "$opts" -- $cur))
+}
+complete -F __nekotools nekotools
+
+__nekoml(){
+	local cur=${COMP_WORDS[COMP_CWORD]}
+	COMPREPLY=($(compgen -f -X "!*.nml" -- "${cur}"))
+}
+complete -d -X '.[^./]*' -F __nekoml nekoml
+
+__nekoc(){
+	local cur=${COMP_WORDS[COMP_CWORD]}
+	COMPREPLY=($(compgen -f -X "!*.neko" -- "${cur}"))
+}
+complete -d -X '.[^./]*' -F __nekoc nekoc

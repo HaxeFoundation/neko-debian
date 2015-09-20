@@ -6,6 +6,7 @@ neko (2.0.0-4) unstable; urgency=low
   * Bump Standards-Version to 3.9.6 (no changes).
   * Add d/watch and get-orig-source target.
   * Convert d/copyright to format 1.0.
+  * Add bash-completion, thanks to Tong.
 
  -- Andy Li <andy@onthewings.net>  Sat, 19 Sep 2015 02:38:21 +0800
 

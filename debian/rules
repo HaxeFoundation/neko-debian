@@ -1,6 +1,9 @@
 #!/usr/bin/make -f
 ## debian/rules for neko.
 
+%:
+	dh $@ --with bash-completion
+
 ## General compile options.
 cflags := \
 	$(shell dpkg-buildflags --get CFLAGS) \
@@ -54,6 +57,7 @@ binary-arch: build
 	dh_installexamples -a
 	dh_installchangelogs -a CHANGES
 	dh_installman -pneko debian/neko.1 debian/nekoc.1 debian/nekotools.1
+	dh_bash-completion
 	dh_strip -a -Xnekoc -Xnekotools
 	dh_compress -a
 	dh_fixperms -a
