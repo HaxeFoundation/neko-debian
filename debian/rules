@@ -75,4 +75,7 @@ clean:
 	make clean
 	dh_clean
 
-.PHONY: binary binary-indep binary-arch build clean
+get-orig-source:
+	uscan --verbose --rename --force-download
+
+.PHONY: binary binary-indep binary-arch build clean get-orig-source

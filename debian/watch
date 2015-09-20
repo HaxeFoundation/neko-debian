@@ -1,0 +1,2 @@
+version=3
+http://nekovm.org/download .*/neko-(\d\.\d\.\d)\.tar\.gz

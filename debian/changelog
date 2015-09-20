@@ -4,6 +4,7 @@ neko (2.0.0-4) unstable; urgency=low
     + Set maintainer to myself.
   * Set Vcs-* fields to Haxe Foundation neko-debian git repo.
   * Bump Standards-Version to 3.9.6 (no changes).
+  * Add d/watch and get-orig-source target.
 
  -- Andy Li <andy@onthewings.net>  Sat, 19 Sep 2015 02:38:21 +0800
 
