@@ -2,84 +2,31 @@
 ## debian/rules for neko.
 
 %:
-	dh $@ --with bash-completion
-
-## General compile options.
-cflags := \
-	$(shell dpkg-buildflags --get CFLAGS) \
-	-Wall -fPIC -I vm -DCOMPACT_TABLE -D_GNU_SOURCE -I libs/common
-ldflags := \
-	$(shell dpkg-buildflags --get LDFLAGS) \
-	-pthread
+	dh $@ --with apache2,bash-completion
 
 ## Both AMD64 and all kFreeBSDs seem to have problems with the type
 ## punning used in the Neko source.
 ifeq (amd64,$(DEB_HOST_ARCH))
-        cflags += -fno-strict-aliasing
+	export DEB_CFLAGS_MAINT_APPEND = -fno-strict-aliasing
 endif
 ifeq (kfreebsd,$(DEB_HOST_ARCH_OS))
-        cflags += -fno-strict-aliasing
+	export DEB_CFLAGS_MAINT_APPEND = -fno-strict-aliasing
 endif
 
-build: build-stamp
-build-arch: build-stamp
-build-indep: build-stamp
+override_dh_auto_build:
+	dh_auto_build -- \
+		CFLAGS="$(CFLAGS) -fPIC -I vm -DCOMPACT_TABLE -D_GNU_SOURCE -I libs/common" \
+		EXTFLAGS="$(LDFLAGS) -pthread" \
+		STD_NDLL_FLAGS="$(CFLAGS) $(LDFLAGS) -Lbin -lneko -lm -lrt"
 
-build-stamp:
-	dh_testdir
-	make CFLAGS="$(cflags)" EXTFLAGS="$(ldflags)"
-	touch $@
+override_dh_auto_install:
 
-debian := $(CURDIR)/debian
-overrides := usr/share/lintian/overrides
+override_dh_strip:
+	dh_strip -Xnekoc -Xnekotools
 
-binary-indep: build
-	dh_testdir
-	dh_testroot
-	dh_install -plibapache2-mod-neko -pneko-dev
-	dh_apache2 -plibapache2-mod-neko -e
-	dh_installdocs -plibapache2-mod-neko -pneko-dev
-	dh_installchangelogs -plibapache2-mod-neko -pneko-dev CHANGES
-	dh_compress -plibapache2-mod-neko -pneko-dev
-	dh_fixperms -plibapache2-mod-neko -pneko-dev
-	dh_installdeb -plibapache2-mod-neko -pneko-dev
-	dh_gencontrol -plibapache2-mod-neko -pneko-dev
-	dh_md5sums -plibapache2-mod-neko -pneko-dev
-	dh_builddeb -plibapache2-mod-neko -pneko-dev
-
-binary-arch: build
-	dh_testdir
-	dh_testroot
-	dh_install -a
-	mkdir -p $(debian)/neko/$(overrides)
-	cp $(debian)/neko.lintian-overrides $(debian)/neko/$(overrides)/neko
-	dh_installdocs -a
-	dh_installexamples -a
-	dh_installchangelogs -a CHANGES
-	dh_installman -pneko debian/neko.1 debian/nekoc.1 debian/nekotools.1
-	dh_bash-completion
-	dh_strip -a -Xnekoc -Xnekotools
-	dh_compress -a
-	dh_fixperms -a
-	dh_makeshlibs
-	dh_installdeb -a
-	dh_shlibdeps -a
-	find $(debian) -name '*.ndll' -exec chmod -x '{}' ';'
-	find $(debian) -name '*.neko' -exec chmod -x '{}' ';'
-	dh_gencontrol -a
-	dh_md5sums -a
-	dh_builddeb -a
-
-binary: binary-indep binary-arch
-
-clean:
-	dh_testdir
-	dh_testroot
-	-rm -f *-stamp
-	make clean
-	dh_clean
+override_dh_fixperms:
+	dh_fixperms
+	find $(CURDIR)/debian -name '*.ndll' -exec chmod -x '{}' ';'
 
 get-orig-source:
 	uscan --verbose --rename --force-download
-
-.PHONY: binary binary-indep binary-arch build clean get-orig-source

@@ -4,3 +4,4 @@ kfreebsd-compile-fix.diff
 kfreebsd-executable-path.diff
 hurd.diff
 apache2.4.diff
+harden.patch

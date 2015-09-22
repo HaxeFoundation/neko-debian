@@ -1,0 +1,22 @@
+## Description: add dpkg-buildflags CFLAGS when compiling ndlls
+## Origin/Author: Andy Li <andy@onthewings.net>
+Index: neko-debian/src/tools/install.neko
+===================================================================
+--- neko-debian.orig/src/tools/install.neko
++++ neko-debian/src/tools/install.neko
+@@ -104,13 +104,13 @@ if( $loader.args[0] == "-nolibs" ) libs
+ // PLATFORM
+ 
+ cflags = "-O3 -DEAPI -fPIC -pthread $(pkg-config --cflags apr-1)";
+-if( system == "Linux" ) cflags += " -pthread";
++if( system == "Linux" ) cflags += " -pthread $(dpkg-buildflags --get CFLAGS)";
+ cc = getenv("CC");
+ if( cc == null ) cc = "gcc";
+ linkcmd = switch system { "BSD" => "ld" default => cc };
+ linkoptions = switch system {
+ 	"Mac" => "-bundle -undefined dynamic_lookup -L../../bin"
+-	default => "-shared -L../../bin -pthread -lneko" 
++	default => "-shared -L../../bin -pthread -lneko $(dpkg-buildflags --get LDFLAGS)"
+ };
+ nekovm = switch system { "Windows" => "..\\bin\\neko" default => "../bin/neko" };
+ 

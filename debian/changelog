@@ -4,7 +4,9 @@ neko (2.0.0-4) unstable; urgency=low
     + Set maintainer to myself.
   * Set Vcs-* fields to Haxe Foundation neko-debian git repo.
   * Bump Standards-Version to 3.9.6 (no changes).
-  * Bump debhelper and compat level to 9 (no changes).
+  * Bump debhelper and compat level to 9.
+  * Clean up d/rules.
+  * Include patch to add dpkg-buildflags CFLAGS when compiling ndlls.
   * Add d/watch and get-orig-source target.
   * Convert d/copyright to format 1.0.
   * Add bash-completion, thanks to Tong.
