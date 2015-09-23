@@ -10,6 +10,7 @@ neko (2.0.0-4) unstable; urgency=low
   * Add d/watch and get-orig-source target.
   * Convert d/copyright to format 1.0.
   * Add bash-completion, thanks to Tong.
+  * Include patch of the upstream fix on JIT.
 
  -- Andy Li <andy@onthewings.net>  Sat, 19 Sep 2015 02:38:21 +0800
 
