@@ -7,10 +7,10 @@
 ## Both AMD64 and all kFreeBSDs seem to have problems with the type
 ## punning used in the Neko source.
 ifeq (amd64,$(DEB_HOST_ARCH))
-	export DEB_CFLAGS_MAINT_APPEND = -fno-strict-aliasing
+export DEB_CFLAGS_MAINT_APPEND = -fno-strict-aliasing
 endif
 ifeq (kfreebsd,$(DEB_HOST_ARCH_OS))
-	export DEB_CFLAGS_MAINT_APPEND = -fno-strict-aliasing
+export DEB_CFLAGS_MAINT_APPEND = -fno-strict-aliasing
 endif
 
 override_dh_auto_build:
