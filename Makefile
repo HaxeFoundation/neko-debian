@@ -14,13 +14,11 @@ INSTALL_PREFIX = /usr/local
 
 CFLAGS = -Wall -O3 -fPIC -fomit-frame-pointer -I vm -D_GNU_SOURCE -I libs/common
 EXTFLAGS = -pthread
-MAJOR=0
-MINOR=1
-MAKESO = $(CC) -shared -Wl,-soname,libneko.so.${MAJOR}
-LIBNEKO_NAME = libneko.so.${MAJOR}.${MINOR}
+MAKESO = $(CC) -shared -Wl,-Bsymbolic
+LIBNEKO_NAME = libneko.so
 LIBNEKO_LIBS = -ldl -lgc -lm
 NEKOVM_FLAGS = -Lbin -lneko
-STD_NDLL_FLAGS = -lm -lrt
+STD_NDLL_FLAGS = ${NEKOVM_FLAGS} -lrt
 INSTALL_FLAGS =
 
 NEKO_EXEC = LD_LIBRARY_PATH=../bin:${LD_LIBRARY_PATH} NEKOPATH=../boot:../bin ../bin/neko
@@ -72,8 +70,6 @@ createbin:
 	-mkdir bin 2>/dev/null
 
 libneko: bin/${LIBNEKO_NAME}
-	ln -sf ${LIBNEKO_NAME} bin/libneko.so.${MAJOR}
-	ln -sf libneko.so.${MAJOR} bin/libneko.so
 
 libs:
 	(cd src; ${NEKO_EXEC} nekoc tools/install.neko)
@@ -112,7 +108,6 @@ bin/std.ndll: ${STD_OBJECTS}
 
 clean:
 	rm -rf bin/${LIBNEKO_NAME} ${LIBNEKO_OBJECTS} ${VM_OBJECTS}
-	rm -rf bin/libneko.so*
 	rm -rf bin/neko bin/nekoc bin/nekoml bin/nekotools
 	rm -rf bin/std bin/*.ndll bin/*.n libs/*/*.o
 	rm -rf src/*.n src/neko/*.n src/nekoml/*.n src/tools/*.n
@@ -120,7 +115,6 @@ clean:
 
 install:
 	cp bin/${LIBNEKO_NAME} ${INSTALL_PREFIX}/lib
-	ln -sf ${LIBNEKO_NAME} ${INSTALL_PREFIX}/lib/libneko.so.${MAJOR}
 	cp bin/neko bin/nekoc bin/nekotools bin/nekoml bin/nekoml.std ${INSTALL_PREFIX}/bin
 	-mkdir ${INSTALL_PREFIX}/lib/neko
 	cp bin/*.ndll ${INSTALL_PREFIX}/lib/neko
