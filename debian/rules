@@ -17,7 +17,7 @@ override_dh_auto_build:
 	dh_auto_build -- \
 		CFLAGS="$(CFLAGS) -Wall -fPIC -I vm -DCOMPACT_TABLE -D_GNU_SOURCE -I libs/common" \
 		EXTFLAGS="$(LDFLAGS) -pthread" \
-		STD_NDLL_FLAGS="$(CFLAGS) $(LDFLAGS) -Lbin -lneko -lm -lrt"
+		STD_NDLL_FLAGS="$(LDFLAGS) -Lbin -lneko -lm -lrt"
 
 override_dh_auto_install:
 
