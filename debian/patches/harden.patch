@@ -1,5 +1,6 @@
 ## Description: add dpkg-buildflags CFLAGS when compiling ndlls
 ## Origin/Author: Andy Li <andy@onthewings.net>
+## Forwarded: https://github.com/HaxeFoundation/neko/pull/92
 Index: neko-debian/src/tools/install.neko
 ===================================================================
 --- neko-debian.orig/src/tools/install.neko
