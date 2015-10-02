@@ -2,8 +2,6 @@
 
 set -e
 
-ENABLE2=/usr/sbin/a2enmod
-
 case "$1" in
     configure)
         ## Register with Apache 2, if present.
@@ -20,6 +18,8 @@ case "$1" in
             else
                 apache2_invoke enmod neko
             fi
+        elif  dpkg-query -f '${Version}'  -W 'apache2.2-common' > /dev/null 2>&1 ; then
+              a2enmod neko
         fi
         ;;
     abort-upgrade|abort-remove|abort-deconfigure)

@@ -1,3 +1,11 @@
+neko (2.0.0-4~ubuntu12.04.1~ppa1) precise; urgency=low
+
+  * Backport to Ubuntu 12.04 precise.
+    + Add back libapache2-mod-neko.install since dh-apache2 is not available.
+    + Modify libapache2-mod-neko.postinst such that it works with Apache 2.2.
+
+ -- Andy Li <andy@onthewings.net>  Sat, 03 Oct 2015 06:23:04 +0800
+
 neko (2.0.0-4) unstable; urgency=low
 
   * Adopt package (Closes: #628939).
