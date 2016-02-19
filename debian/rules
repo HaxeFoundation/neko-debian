@@ -13,12 +13,6 @@ ifeq (kfreebsd,$(DEB_HOST_ARCH_OS))
 export DEB_CFLAGS_MAINT_APPEND = -fno-strict-aliasing
 endif
 
-override_dh_auto_build:
-	dh_auto_build -- \
-		CFLAGS="$(CFLAGS) -Wall -fPIC -I vm -DCOMPACT_TABLE -D_GNU_SOURCE -I libs/common" \
-		EXTFLAGS="$(LDFLAGS) -pthread" \
-		STD_NDLL_FLAGS="$(LDFLAGS) -Lbin -lneko -lm -lrt"
-
 override_dh_auto_install:
 
 override_dh_strip:
