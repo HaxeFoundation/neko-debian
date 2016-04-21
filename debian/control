@@ -3,7 +3,7 @@ Section: interpreters
 Priority: optional
 Maintainer: Andy Li <andy@onthewings.net>
 Standards-Version: 3.9.6
-Build-Depends: debhelper (>= 9), pkg-config, libgc-dev, dh-apache2, apache2-dev, libssl-dev, libmariadb-client-lgpl-dev-compat | libmysqlclient-dev, libsqlite3-dev, libpcre3-dev, libapr1-dev, libgtk2.0-dev, libmbedtls-dev, bash-completion
+Build-Depends: debhelper (>= 9), cmake, pkg-config, git, libgc-dev, dh-apache2, apache2-dev, libssl-dev, libmariadb-client-lgpl-dev-compat | libmysqlclient-dev, libsqlite3-dev, libpcre3-dev, libapr1-dev, libgtk2.0-dev, libmbedtls-dev, bash-completion
 Vcs-Git: https://github.com/HaxeFoundation/neko-debian.git
 Vcs-Browser: https://github.com/HaxeFoundation/neko-debian
 Homepage: http://nekovm.org

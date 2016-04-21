@@ -13,14 +13,11 @@ ifeq (kfreebsd,$(DEB_HOST_ARCH_OS))
 export DEB_CFLAGS_MAINT_APPEND = -fno-strict-aliasing
 endif
 
-override_dh_auto_install:
+override_dh_auto_configure:
+	dh_auto_configure -- -DRUN_LDCONFIG=OFF
 
 override_dh_strip:
-	dh_strip -Xnekoc -Xnekotools
-
-override_dh_fixperms:
-	dh_fixperms
-	find $(CURDIR)/debian -name '*.ndll' -exec chmod -x '{}' ';'
+	dh_strip -Xnekoc -Xnekoml -Xnekotools
 
 get-orig-source:
 	uscan --verbose --rename --force-download
