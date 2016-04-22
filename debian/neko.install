@@ -1,4 +1,2 @@
-bin/*.ndll usr/lib/neko
-bin/neko usr/bin
-bin/nekoc usr/bin
-bin/nekotools usr/bin
+usr/lib/neko/* usr/lib/neko
+usr/bin/* usr/bin
