@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2016 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -225,11 +225,11 @@ typedef struct _mt_lock mt_lock;
 #define val_number(v)		(val_is_int(v)?val_int(v):((val_tag(v)==VAL_FLOAT)?val_float(v):val_int32(v)))
 #define val_hdata(v)		((vhash*)val_data(v))
 #define val_string(v)		(&((vstring*)(v))->c)
-#define val_strlen(v)		(val_tag(v) >> TAG_BITS)
+#define val_strlen(v)		((signed)(((unsigned)val_tag(v)) >> TAG_BITS))
 #define val_set_length(v,l) val_tag(v) = val_short_tag(v) | ((l) << TAG_BITS)
 #define val_set_size		val_set_length
 
-#define val_array_size(v)	(val_tag(v) >> TAG_BITS)
+#define val_array_size(v)	((signed)(((unsigned)val_tag(v)) >> TAG_BITS))
 #define val_array_ptr(v)	(&((varray*)(v))->ptr)
 #define val_fun_nargs(v)	((vfunction*)(v))->nargs
 #define alloc_int(v)		((value)(int_val)((((int)(v)) << 1) | 1))
@@ -299,6 +299,7 @@ typedef struct _mt_lock mt_lock;
 #define VAR_ARGS (-1)
 #define DEFINE_PRIM_MULT(func) C_FUNCTION_BEGIN EXPORT void *func##__MULT() { return (void*)(&func); } C_FUNCTION_END
 #define DEFINE_PRIM(func,nargs) C_FUNCTION_BEGIN EXPORT void *func##__##nargs() { return (void*)(&func); } C_FUNCTION_END
+#define DEFINE_PRIM_WITH_NAME(func,name,nargs) C_FUNCTION_BEGIN EXPORT void *name##__##nargs() { return (void*)(&func); } C_FUNCTION_END
 #define DEFINE_KIND(name) int_val __kind_##name = 0; vkind name = (vkind)&__kind_##name;
 
 #ifdef NEKO_STANDALONE
@@ -347,6 +348,7 @@ typedef struct _mt_lock mt_lock;
 #define buffer_append		neko_buffer_append
 #define buffer_append_sub	neko_buffer_append_sub
 #define buffer_append_char	neko_buffer_append_char
+#define buffer_length		neko_buffer_length
 #define buffer_to_string	neko_buffer_to_string
 #define val_buffer			neko_val_buffer
 #define val_compare			neko_val_compare
@@ -359,6 +361,7 @@ typedef struct _mt_lock mt_lock;
 #define val_hash			neko_val_hash
 #define k_hash				neko_k_hash
 #define kind_share			neko_kind_share
+#define kind_lookup			neko_kind_lookup
 
 #define alloc_local			neko_alloc_local
 #define local_get			neko_local_get
@@ -418,6 +421,7 @@ C_FUNCTION_BEGIN
 	EXTERN void buffer_append_sub( buffer b, const char *s, int_val len );
 	EXTERN void buffer_append_char( buffer b, char c );
 	EXTERN value buffer_to_string( buffer b );
+	EXTERN int buffer_length( buffer b );
 	EXTERN void val_buffer( buffer b, value v );
 
 	EXTERN int val_compare( value a, value b );
@@ -428,6 +432,7 @@ C_FUNCTION_BEGIN
 	EXTERN int val_hash( value v );
 
 	EXTERN void kind_share( vkind *k, const char *name );
+	EXTERN vkind kind_lookup( const char *name );
 	EXTERN void _neko_failure( value msg, const char *file, int line );
 
 	// MULTITHREADING API

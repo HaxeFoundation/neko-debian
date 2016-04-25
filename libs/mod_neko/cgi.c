@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2016 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -128,7 +128,11 @@ static value get_host_name() {
 	<doc>Get the connected client IP</doc>
 **/
 static value get_client_ip() {
-	return alloc_string( inet_ntoa(REMOTE_ADDR(CONTEXT()->r->connection)) );
+#if AP_SERVER_MAJORVERSION_NUMBER >= 2 && AP_SERVER_MINORVERSION_NUMBER >= 4
+	return alloc_string( CONTEXT()->r->useragent_ip );
+#else
+	return alloc_string( CONTEXT()->r->connection->remote_ip );
+#endif
 }
 
 /**
@@ -199,7 +203,6 @@ static int store_table( void *r, const char *key, const char *val ) {
 	value a;
 	if( key == NULL || val == NULL )
 		return 1;
-	a = alloc_array(2);
 	a = alloc_array(3);
 	val_array_ptr(a)[0] = alloc_string(key);
 	val_array_ptr(a)[1] = alloc_string(val);
@@ -338,7 +341,7 @@ static value parse_multipart_data( value onpart, value ondata ) {
 		while( true ) {
 			const char *boundary;
 			// recall buffer
-			memcpy(val_string(buf),val_string(buf)+pos,len - pos);
+			memmove(val_string(buf),val_string(buf)+pos,len - pos);
 			len -= pos;
 			pos = 0;
 			fill_buffer(c,buf,&len);
@@ -358,7 +361,7 @@ static value parse_multipart_data( value onpart, value ondata ) {
 				pos = (int)(boundary - val_string(buf));
 				val_call3(ondata,buf,alloc_int(0),alloc_int(pos-2));
 				// recall
-				memcpy(val_string(buf),val_string(buf)+pos,len - pos);
+				memmove(val_string(buf),val_string(buf)+pos,len - pos);
 				len -= pos;
 				break;
 			}
@@ -572,9 +575,9 @@ static value log_message( value message ) {
 	mcontext *c = CONTEXT();
 	val_check(message, string);
 #ifdef APACHE_2_X
-	ap_log_rerror(__FILE__, __LINE__, APLOG_NOTICE, APR_SUCCESS, c->r, "[mod_neko] %s", val_string(message));
+	ap_log_rerror(APLOG_MARK, APLOG_NOTICE, APR_SUCCESS, c->r, "[mod_neko] %s", val_string(message));
 #else
-	ap_log_rerror(__FILE__, __LINE__, APLOG_NOTICE, c->r, "[mod_neko] %s", val_string(message));
+	ap_log_rerror(APLOG_MARK, APLOG_NOTICE, c->r, "[mod_neko] %s", val_string(message));
 #endif
 	return val_null;
 }
