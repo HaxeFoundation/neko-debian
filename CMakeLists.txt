@@ -45,8 +45,13 @@ if (${CMAKE_VERSION} VERSION_LESS 2.8.12)
 endif()
 
 set(NEKO_VERSION_MAJOR 2)
-set(NEKO_VERSION_MINOR 0)
+set(NEKO_VERSION_MINOR 1)
 set(NEKO_VERSION_PATCH 0)
+
+configure_file (
+	"${CMAKE_SOURCE_DIR}/vm/neko.h.in"
+	"${CMAKE_BINARY_DIR}/neko.h"
+)
 
 set(ndll_targets
 	std.ndll
@@ -174,7 +179,15 @@ endif()
 
 if(UNIX)
 	add_definitions(-D_GNU_SOURCE)
-	add_compile_options(-fno-omit-frame-pointer -fPIC)
+	add_compile_options(-fno-omit-frame-pointer)
+
+	if (${CMAKE_VERSION} VERSION_LESS 2.8.10)
+		add_compile_options(-fPIC)
+		set(ARG_PIC -DCMAKE_C_FLAGS=-fPIC)
+	else()
+		set(CMAKE_POSITION_INDEPENDENT_CODE TRUE)
+		set(ARG_PIC -DCMAKE_POSITION_INDEPENDENT_CODE=TRUE)
+	endif()
 
 	# https://github.com/HaxeFoundation/neko/pull/17
 	if(CMAKE_SIZEOF_VOID_P EQUAL 4)
@@ -217,6 +230,7 @@ set(EP_PROPS
 
 
 include_directories(
+	${CMAKE_BINARY_DIR}
 	vm
 	libs/common
 )
@@ -371,8 +385,8 @@ set_target_properties(nekovm libneko
 )
 set_target_properties(libneko
 	PROPERTIES
-	VERSION 0.0.0
-	SOVERSION 0
+	VERSION ${NEKO_VERSION_MAJOR}.${NEKO_VERSION_MINOR}.${NEKO_VERSION_PATCH}
+	SOVERSION ${NEKO_VERSION_MAJOR}
 	COMPILE_DEFINITIONS "_USRDLL;NEKOVM_DLL_EXPORTS;NEKO_SOURCES"
 )
 set_target_properties(std.ndll
@@ -419,8 +433,8 @@ if (STATIC_OPENSSL)
 	endif()
 	ExternalProject_Add(OpenSSL
 		${EP_CONFIGS}
-		URL https://www.openssl.org/source/openssl-1.0.2g.tar.gz
-		URL_MD5 f3c710c045cdee5fd114feb69feba7aa
+		URL https://www.openssl.org/source/openssl-1.0.2h.tar.gz
+		URL_MD5 9392e65072ce4b614c1392eefc1f23d0
 		${OPENSSL_CONFS}
 	)
 	set_target_properties(OpenSSL PROPERTIES ${EP_PROPS})
@@ -447,7 +461,7 @@ if (STATIC_ZLIB)
 	if (UNIX)
 		list(APPEND ZLIB_CMAKE_ARGS
 			-DCMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES}
-			-DCMAKE_C_FLAGS=-fPIC
+			${ARG_PIC}
 		)
 	endif()
 	ExternalProject_Add(Zlib
@@ -497,8 +511,8 @@ if (STATIC_MARIADBCONNECTOR)
 	ExternalProject_Add(MariaDBConnector
 		${EP_CONFIGS}
 		DEPENDS ${OPENSSL_DEP}
-		URL https://downloads.mariadb.org/f/connector-c-2.2.2/mariadb-connector-c-2.2.2-src.tar.gz
-		URL_MD5 a9767a8ed295f3d0ca3d9241ccde4c3f
+		URL https://downloads.mariadb.org/f/connector-c-2.2.3/mariadb-connector-c-2.2.3-src.tar.gz
+		URL_MD5 07d068bf6b6b3406a6cd65edee4211f5
 		CMAKE_ARGS
 			-Wno-dev
 			-DCMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES}
@@ -935,7 +949,7 @@ if (STATIC_MBEDTLS)
 		list(APPEND MBEDTLS_CMAKE_ARGS
 			-DLINK_WITH_PTHREAD=ON
 			-DCMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES}
-			-DCMAKE_C_FLAGS=-fPIC
+			${ARG_PIC}
 		)
 	endif()
 	ExternalProject_Add(MbedTLS
@@ -1029,6 +1043,14 @@ else()
 	set(neko_exec LD_LIBRARY_PATH=${CMAKE_RUNTIME_OUTPUT_DIRECTORY} NEKOPATH=${CMAKE_RUNTIME_OUTPUT_DIRECTORY} $<TARGET_FILE:nekovm>)
 endif()
 
+file(GLOB neko_files
+	src/**/*.neko
+)
+
+file(GLOB nml_files
+	src/**/*.nml
+)
+
 add_custom_command(OUTPUT ${compilers_outputs} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test.n
 	COMMAND ${set_neko_env}
 
@@ -1059,7 +1081,7 @@ add_custom_command(OUTPUT ${compilers_outputs} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
 		${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/nekotools.n
 
 	VERBATIM
-	DEPENDS nekovm std.ndll
+	DEPENDS nekovm std.ndll ${nml_files} ${neko_files}
 	WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src
 )
 
@@ -1151,9 +1173,6 @@ if (WIN32)
 	install (
 		FILES
 			${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/gcmt-dll.dll
-			${CMAKE_SOURCE_DIR}/README.md
-			${CMAKE_SOURCE_DIR}/LICENSE
-			${CMAKE_SOURCE_DIR}/CHANGES
 		DESTINATION .
 	)
 
@@ -1191,12 +1210,21 @@ install (
 	DESTINATION include
 	FILES_MATCHING PATTERN "neko*.h"
 )
+install (
+	FILES ${CMAKE_BINARY_DIR}/neko.h
+	DESTINATION include
+)
 
 if (RUN_LDCONFIG)
 	install(SCRIPT "${CMAKE_SOURCE_DIR}/cmake/ldconfig.cmake")
 endif()
 
-install(SCRIPT "${CMAKE_SOURCE_DIR}/cmake/flatten.cmake")
+configure_file(
+	"${CMAKE_SOURCE_DIR}/cmake/flatten.cmake.in"
+	"${CMAKE_BINARY_DIR}/cmake/flatten.cmake"
+	IMMEDIATE @ONLY)
+
+install(SCRIPT "${CMAKE_BINARY_DIR}/cmake/flatten.cmake")
 
 # uninstall target
 configure_file(
@@ -1220,8 +1248,10 @@ set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
 
 if (WIN32)
 	set(CPACK_GENERATOR "ZIP")
+	set(bin_archive_format zip)
 else()
 	set(CPACK_GENERATOR "TGZ")
+	set(bin_archive_format tar.gz)
 endif()
 
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
@@ -1251,10 +1281,11 @@ else()
 	set(OS_NAME "")
 endif()
 
-set(CPACK_PACKAGE_FILE_NAME
-	"${CMAKE_PROJECT_NAME}-${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}-${OS_NAME}${arch_64}")
-set(CPACK_SOURCE_PACKAGE_FILE_NAME
-	"${CMAKE_PROJECT_NAME}-${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}-src")
+set(bin_archive_name_we "${CMAKE_PROJECT_NAME}-${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}-${OS_NAME}${arch_64}")
+set(bin_archive_name "${bin_archive_name_we}.${bin_archive_format}")
+set(CPACK_PACKAGE_FILE_NAME ${bin_archive_name_we})
+# set(CPACK_SOURCE_PACKAGE_FILE_NAME
+# 	"${CMAKE_PROJECT_NAME}-${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}-src")
 
 include(CPack)
 
@@ -1294,5 +1325,22 @@ if(UNIX AND NOT APPLE)
 			-DNEKO_VERSION=${NEKO_VERSION_MAJOR}.${NEKO_VERSION_MINOR}.${NEKO_VERSION_PATCH}
 			-P ${CMAKE_SOURCE_DIR}/cmake/upload_to_ppa.cmake
 		DEPENDS source_archive_fat
+	)
+endif()
+
+
+#######################
+
+# chocolatey
+if(WIN32)
+	add_custom_target(package_choco
+		COMMAND ${CMAKE_COMMAND}
+			-Dsource_dir=${CMAKE_SOURCE_DIR}
+			-Dbin_dir=${CMAKE_BINARY_DIR}
+			-Dbin_archive=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${bin_archive_name}
+			-Dbin_archive_name_we=${bin_archive_name_we}
+			-DNEKO_VERSION=${NEKO_VERSION_MAJOR}.${NEKO_VERSION_MINOR}.${NEKO_VERSION_PATCH}
+			-P ${CMAKE_SOURCE_DIR}/cmake/package_choco.cmake
+		DEPENDS package
 	)
 endif()
