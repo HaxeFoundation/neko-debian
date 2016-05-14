@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2016 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -130,6 +130,7 @@ static value utf8_buf_content( value buf ) {
 	val_check_kind(buf,k_ubuf);
 	b = (ubuf*)val_data(buf);
 	val_set_length(b->buf,b->pos);
+	val_string(b->buf)[b->pos] = 0;
 	return b->buf;
 }
 
@@ -401,7 +402,7 @@ static value utf8_compare( value str1, value str2 ) {
 	l = (l1 < l2)?l1:l2;
 	while( l-- ) {
 		unsigned char c1 = *s1++;
-		unsigned char c2 = *s1++;
+		unsigned char c2 = *s2++;
 		if( c1 != c2 )
 			return alloc_int((c1 > c2)?-1:1);
 		if( c1 < 0x7F )

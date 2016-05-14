@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2016 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -24,6 +24,7 @@
 #include <neko_vm.h>
 #ifdef NEKO_WINDOWS
 #	include <winsock2.h>
+#	include <MSTcpIP.h>
 #	define FDSIZE(n)	(sizeof(u_int) + (n) * sizeof(SOCKET))
 #	define SHUT_WR		SD_SEND
 #	define SHUT_RD		SD_RECEIVE
@@ -47,6 +48,17 @@
 #	define closesocket close
 #	define SOCKET_ERROR (-1)
 #	define INVALID_SOCKET (-1)
+#endif
+#ifdef NEKO_LINUX
+#	include <linux/version.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,5,44)
+#	include <sys/epoll.h>
+#	define HAS_EPOLL
+#endif
+#endif
+#ifndef HAS_EPOLL
+#	define EPOLLIN 0x001
+#	define EPOLLOUT 0x004
 #endif
 
 #if defined(NEKO_WINDOWS) || defined(NEKO_MAC)
@@ -78,11 +90,30 @@ typedef struct {
 	value widx;
 } polldata;
 
+typedef struct {
+	int maxevents;
+	value result;
+#ifndef HAS_EPOLL
+	value read;
+	value write;
+	int rcount;
+	int wcount;
+#else
+	int epollfd;
+	struct epoll_event *events;
+#endif
+} epolldata;
+
 DEFINE_KIND(k_socket);
 DEFINE_KIND(k_poll);
+DEFINE_KIND(k_epoll);
 
 #define val_sock(o)		((SOCKET)(int_val)val_data(o))
 #define val_poll(o)		((polldata*)val_data(o))
+#define val_epoll(o)	((epolldata*)val_data(o))
+
+static field f_host;
+static field f_port;
 
 /**
 	<doc>
@@ -119,6 +150,8 @@ static value socket_init() {
 		init_done = true;
 	}
 #endif
+	f_host = val_id("host");
+	f_port = val_id("port");
 	return val_true;
 }
 
@@ -429,14 +462,13 @@ static value socket_listen( value o, value n ) {
 
 static fd_set INVALID;
 
-static fd_set *make_socket_array( value a, fd_set *tmp, SOCKET *n ) {
-	int i, len;
+static fd_set *make_socket_array( value a, int len, fd_set *tmp, SOCKET *n ) {
+	int i;
 	SOCKET sock;
 	if( val_is_null(a) )
 		return NULL;
 	if( !val_is_array(a) )
 		return &INVALID;
-	len = val_array_size(a);
 	if( len > FD_SETSIZE )
 		val_throw(alloc_string("Too many sockets in select"));
 	FD_ZERO(tmp);
@@ -486,9 +518,9 @@ static value socket_select( value rs, value ws, value es, value timeout ) {
 	fd_set *ra, *wa, *ea;
 	value r;
 	POSIX_LABEL(select_again);
-	ra = make_socket_array(rs,&rx,&n);
-	wa = make_socket_array(ws,&wx,&n);
-	ea = make_socket_array(es,&ex,&n);
+	ra = make_socket_array(rs,val_array_size(rs),&rx,&n);
+	wa = make_socket_array(ws,val_array_size(ws),&wx,&n);
+	ea = make_socket_array(es,val_array_size(es),&ex,&n);
 	if( ra == &INVALID || wa == &INVALID || ea == &INVALID )
 		neko_error();
 	if( val_is_null(timeout) )
@@ -849,6 +881,312 @@ static value socket_set_fast_send( value s, value f ) {
 	return val_null;
 }
 
+/**
+	socket_send_to : 'socket -> buf:string -> pos:int -> length:int -> addr:{host:'int32,port:int} -> int
+	<doc>
+	Send data from an unconnected UDP socket to the given address.
+	</doc>
+**/
+static value socket_send_to( value o, value data, value pos, value len, value vaddr ) {
+	int p,l,dlen;
+	value host, port;
+	struct sockaddr_in addr;
+	val_check_kind(o,k_socket);
+	val_check(data,string);
+	val_check(pos,int);
+	val_check(len,int);
+	val_check(vaddr,object);
+	host = val_field(vaddr, f_host);
+	port = val_field(vaddr, f_port);
+	val_check(host,int32);
+	val_check(port,int);
+	p = val_int(pos);
+	l = val_int(len);
+	dlen = val_strlen(data);
+	memset(&addr,0,sizeof(addr));
+	addr.sin_family = AF_INET;
+	addr.sin_port = htons(val_int(port));
+	*(int*)&addr.sin_addr.s_addr = val_int32(host);
+	if( p < 0 || l < 0 || p > dlen || p + l > dlen )
+		neko_error();
+	POSIX_LABEL(send_again);
+	dlen = sendto(val_sock(o), val_string(data) + p , l, MSG_NOSIGNAL, (struct sockaddr*)&addr, sizeof(addr));
+	if( dlen == SOCKET_ERROR ) {
+		HANDLE_EINTR(send_again);
+		return block_error();
+	}
+	return alloc_int(dlen);
+}
+
+/**
+	socket_recv_from : 'socket -> buf:string -> pos:int -> length:int -> addr:{host:'int32,port:int} -> int
+	<doc>
+	Read data from an unconnected UDP socket, store the address from which we received data in addr.
+	</doc>
+**/
+static value socket_recv_from( value o, value data, value pos, value len, value addr ) {
+	int p,l,dlen,ret;
+	int retry = 0;
+	struct sockaddr_in saddr;
+	int slen = sizeof(saddr);
+	val_check_kind(o,k_socket);
+	val_check(data,string);
+	val_check(pos,int);
+	val_check(len,int);
+	val_check(addr,object);
+	p = val_int(pos);
+	l = val_int(len);
+	dlen = val_strlen(data);
+	if( p < 0 || l < 0 || p > dlen || p + l > dlen )
+		neko_error();
+	POSIX_LABEL(recv_from_again);
+	if( retry++ > NRETRYS ) {
+		sock_tmp t;
+		t.sock = val_sock(o);
+		t.buf = val_string(data) + p;
+		t.size = l;
+		neko_thread_blocking(tmp_recv,&t);
+		ret = t.ret;
+	} else
+		ret = recvfrom(val_sock(o), val_string(data) + p , l, MSG_NOSIGNAL, (struct sockaddr*)&saddr, &slen);
+	if( ret == SOCKET_ERROR ) {
+		HANDLE_EINTR(recv_from_again);
+#ifdef	NEKO_WINDOWS
+		if( WSAGetLastError() == WSAECONNRESET )
+			ret = 0;
+		else
+#endif
+		return block_error();
+	}
+	alloc_field(addr,f_host,alloc_int32(*(int*)&saddr.sin_addr));
+	alloc_field(addr,f_port,alloc_int(ntohs(saddr.sin_port)));
+	return alloc_int(ret);
+}
+
+/**
+	socket_set_keepalive : 'socket -> bool -> time:int? -> interval:int? -> void
+	<doc>
+	Enable or disable TCP_KEEPALIVE flag for the socket
+	</doc>
+**/
+static value socket_set_keepalive( value o, value b, value time, value interval ) {
+	int val;
+	SOCKET s;
+	val_check_kind(o,k_socket);
+	val_check(b,bool);
+	if( !val_is_null(time) || !val_is_null(interval) ){
+		val_check(time,int);
+		val_check(interval,int);
+	}
+	s = val_sock(o);
+	if( !val_bool(b) ) {
+		val = 0;
+		if( setsockopt(s, SOL_SOCKET, SO_KEEPALIVE, (void *)&val, sizeof(val)) != 0 )
+			neko_error();
+	} else {
+		val = 1;
+		if( setsockopt(s, SOL_SOCKET, SO_KEEPALIVE, (void *)&val, sizeof(val)) != 0 )
+			neko_error();
+
+		if( !val_is_null(time) && !val_is_null(interval) ) {
+#			if defined(NEKO_WINDOWS)
+			u_long params[3] = { 1, (unsigned long)val_int(time)*1000, (unsigned long)val_int(interval)*1000 };
+			if( WSAIoctl(s, SIO_KEEPALIVE_VALS, &params, sizeof(params), NULL, 0, &val, NULL, NULL) != 0 )
+				neko_error();
+#			else
+#			if defined(TCP_KEEPIDLE)
+			val = val_int(time);
+			if( setsockopt(s, IPPROTO_TCP, TCP_KEEPIDLE, (void *)&val, sizeof(val)) != 0 )
+				neko_error();
+#			elif defined(TCP_KEEPALIVE)
+			val = val_int(time);
+			if( setsockopt(s, IPPROTO_TCP, TCP_KEEPALIVE, (void *)&val, sizeof(val)) != 0 )
+				neko_error();
+#			endif
+#			if defined(TCP_KEEPINTVL)
+			val = val_int(interval);
+			if( setsockopt(s, IPPROTO_TCP, TCP_KEEPINTVL, (void *)&val, sizeof(val)) != 0 )
+				neko_error();
+#			endif
+#			endif
+		}
+	}
+	return val_null;
+}
+
+/**
+	socket_epoll_alloc : void -> 'epoll
+	<doc>
+	Allocate memory for edge/level-triggered polling (epoll).
+
+	On Linux, this will use epoll; on other systems, this will fall back to select.
+	</doc>
+**/
+static value socket_epoll_alloc(value maxevents) {
+	epolldata *ep;
+	val_check(maxevents,int);
+	ep = (epolldata*)alloc(sizeof(epolldata));
+	ep->maxevents = val_int(maxevents);
+	ep->result = alloc_array(val_int(maxevents));
+#ifndef HAS_EPOLL
+	ep->read = alloc_array(FD_SETSIZE);
+	ep->write = alloc_array(FD_SETSIZE);
+	ep->rcount = 0;
+	ep->wcount = 0;
+#else
+	ep->epollfd = epoll_create1(0);
+	ep->events = (struct epoll_event*)alloc(sizeof(struct epoll_event) * val_int(maxevents));
+#endif
+	return alloc_abstract(k_epoll, ep);
+}
+
+/**
+	socket_epoll_register : 'epoll -> 'socket -> int
+	<doc>Register a socket with an epoll instance to be notified of events. Returns the socket's fd.</doc>
+**/
+static value socket_epoll_register(value e, value s, value events) {
+	SOCKET sock;
+	int event_types;
+	epolldata *ep;
+	val_check_kind(e,k_epoll);
+	val_check_kind(s,k_socket);
+	val_check(events,int);
+	sock = val_sock(s);
+	event_types = val_int(events);
+	ep = val_epoll(e);
+#ifndef HAS_EPOLL
+	if (sock >= FD_SETSIZE)
+		val_throw(alloc_string("Can't register file descriptor >= FD_SETSIZE"));
+	if (event_types & EPOLLIN) {
+		if (ep->rcount >= FD_SETSIZE)
+			val_throw(alloc_string("Too many sockets (on non-Linux platforms, 'epoll' uses select)"));
+		val_array_ptr(ep->read)[ep->rcount++] = s;
+	}
+	if (event_types & EPOLLOUT) {
+		if (ep->wcount >= FD_SETSIZE)
+			val_throw(alloc_string("Too many sockets (on non-Linux platforms, 'epoll' uses select)"));
+		val_array_ptr(ep->write)[ep->wcount++] = s;
+	}
+#else
+	struct epoll_event ev;
+	ev.events = event_types;
+	ev.data.fd = sock;
+	int ret = epoll_ctl(ep->epollfd, EPOLL_CTL_ADD, sock, &ev);
+	if (ret == -1)
+		val_throw(alloc_int(errno));
+#endif
+	return alloc_int(sock);
+}
+
+/**
+	socket_epoll_unregister : 'epoll -> 'socket -> int
+	<doc>Unegister a socket with an epoll instance. Returns the socket's fd.</doc>
+**/
+static value socket_epoll_unregister(value e, value s) {
+	SOCKET sock;
+	epolldata *ep;
+#	ifndef HAS_EPOLL
+	int i, j;
+#	endif
+	val_check_kind(e,k_epoll);
+	val_check_kind(s,k_socket);
+	sock = val_sock(s);
+	ep = val_epoll(e);
+#ifndef HAS_EPOLL
+	for (i = 0; i < ep->rcount; i++) {
+		if (val_array_ptr(ep->read)[i] == s) {
+			for (j = i+1; j < ep->rcount; j++) {
+				val_array_ptr(ep->read)[j] = val_array_ptr(ep->read)[j-1];
+			}
+			val_array_ptr(ep->read)[--ep->rcount] = NULL;
+			--i;
+		}
+	}
+	for (i = 0; i < ep->wcount; i++) {
+		if (val_array_ptr(ep->write)[i] == s) {
+			for (j = i+1; j < ep->wcount; j++) {
+				val_array_ptr(ep->write)[j] = val_array_ptr(ep->write)[j-1];
+			}
+			val_array_ptr(ep->write)[--ep->wcount] = NULL;
+			--i;
+		}
+	}
+#else
+	struct epoll_event ev;
+	int ret = epoll_ctl(ep->epollfd, EPOLL_CTL_DEL, sock, &ev);
+	if (ret == -1)
+		return alloc_int(ret);
+	else
+#endif
+	return alloc_int(sock);
+}
+
+/**
+	socket_epoll_wait : 'epoll -> int -> float -> int array
+	<doc>Wait and return a list of socket fds with events.</doc>
+**/
+static value socket_epoll_wait(value e, value timeout) {
+	epolldata *ep;
+#ifndef HAS_EPOLL
+	struct timeval t;
+	SOCKET n = 0;
+	bool indefinite;
+	fd_set rx, wx;
+	fd_set *ra, *wa;
+	int i;
+	int pos = 0;
+	val_check_kind(e,k_epoll);
+	ep = val_epoll(e);
+	POSIX_LABEL(select_again);
+	ra = ep->rcount == 0 ? NULL : make_socket_array(ep->read, ep->rcount, &rx, &n);
+	wa = ep->wcount == 0 ? NULL : make_socket_array(ep->write, ep->wcount, &wx, &n);
+	indefinite = val_is_null(timeout);
+	if (!indefinite) {
+		val_check(timeout,number);
+		init_timeval(val_number(timeout),&t);
+	}
+	if( select((int)(n+1),ra,wa,NULL,indefinite ? NULL : &t) == SOCKET_ERROR ) {
+		HANDLE_EINTR(select_again);
+		val_throw(alloc_int(errno));
+	}
+	if (ra != NULL) {
+		for (i=0; i < ep->rcount && pos < ep->maxevents; i++) {
+			value s = val_array_ptr(ep->read)[i];
+			if (FD_ISSET(val_sock(s),ra))
+				val_array_ptr(ep->result)[pos++] = alloc_int(val_sock(s));
+		}
+	}
+	if (wa != NULL) {
+		for (i=0; i < ep->wcount && pos < ep->maxevents; i++) {
+			value s = val_array_ptr(ep->write)[i];
+			if (FD_ISSET(val_sock(s),wa))
+				val_array_ptr(ep->result)[pos++] = alloc_int(val_sock(s));
+		}
+	}
+	val_set_size(ep->result,pos);
+	return ep->result;
+#else
+	int t;
+	val_check_kind(e,k_epoll);
+	ep = val_epoll(e);
+	if (val_is_null(timeout))
+		t = -1;
+	else {
+		val_check(timeout,number);
+		t = (int)(val_number(timeout)) * 1000;
+	}
+	int ret = epoll_wait(ep->epollfd, ep->events, ep->maxevents, t);
+	if (ret == -1)
+		val_throw(alloc_int(errno));
+	val_set_size(ep->result, ret);
+	int i;
+	for (i = 0; i < ret; i++) {
+		val_array_ptr(ep->result)[i] = alloc_int(ep->events[i].data.fd);
+	}
+	return ep->result;
+#endif
+}
+
 DEFINE_PRIM(socket_init,0);
 DEFINE_PRIM(socket_new,1);
 DEFINE_PRIM(socket_send,4);
@@ -870,10 +1208,20 @@ DEFINE_PRIM(socket_shutdown,3);
 DEFINE_PRIM(socket_set_blocking,2);
 DEFINE_PRIM(socket_set_fast_send,2);
 
+DEFINE_PRIM(socket_send_to,5);
+DEFINE_PRIM(socket_recv_from,5);
+
+DEFINE_PRIM(socket_set_keepalive,4);
+
 DEFINE_PRIM(socket_poll_alloc,1);
 DEFINE_PRIM(socket_poll,3);
 DEFINE_PRIM(socket_poll_prepare,3);
 DEFINE_PRIM(socket_poll_events,2);
+
+DEFINE_PRIM(socket_epoll_alloc,1);
+DEFINE_PRIM(socket_epoll_register,3);
+DEFINE_PRIM(socket_epoll_unregister,2);
+DEFINE_PRIM(socket_epoll_wait,2);
 
 DEFINE_PRIM(host_local,0);
 DEFINE_PRIM(host_resolve,1);
