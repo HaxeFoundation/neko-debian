@@ -5,6 +5,7 @@ neko (2.1.0-1) unstable; urgency=low
     + libneko is now versioned in upstream. (libneko2)
     + The "nekotools booted" binaries can now be stripped correctly.
     + Use MariaDB for compiling mysql.ndll.
+    + Updated d/copyright.
   * Fixed shlibdeps for the neko package.
   * Updated d/watch pattern.
   * Bump Standards-Version to 3.9.8 (no changes).
