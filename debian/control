@@ -37,7 +37,7 @@ Description: Lightweight virtual machine - shared library
  Neko was written by Nicolas Cannasse.
 
 Package: neko-dev
-Architecture: all
+Architecture: any
 Multi-Arch: same
 Section: libdevel
 Depends: libneko2 (>= ${source:Upstream-Version}), libneko2 (<<  ${source:Upstream-Version}+1~), ${misc:Depends}
