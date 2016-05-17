@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2016 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -134,7 +134,8 @@ static value date_format( value o, value fmt ) {
 	d = val_any_int(o);
 	if( localtime_r(&d,&t) == NULL )
 		neko_error();
-	strftime(buf,127,val_string(fmt),&t);
+	if( strftime(buf,127,val_string(fmt),&t) == 0 )
+		neko_error();		
 	return alloc_string(buf);
 }
 

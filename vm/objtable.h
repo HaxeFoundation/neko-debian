@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2016 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -54,11 +54,11 @@ static INLINE value otable_get(objtable *t,field id) {
 	int min;
 	int max;
 	int mid;
-	objcell *c;
+	const objcell *c;
 	field cid;
 	min = 0;
 	max = t->count;
-	c = t->cells;
+	c = (const objcell*)t->cells;
 	while( min < max ) {
 		mid = (min + max) >> 1;
 		cid = c[mid].id;
