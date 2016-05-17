@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2016 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -355,7 +355,7 @@ static bool send_multipart_data( proto *p, char *buf, int bufsize ) {
 		while( true ) {
 			const char *boundary;
 			// recall buffer
-			memcpy(buf,buf+pos,len - pos);
+			memmove(buf,buf+pos,len - pos);
 			len -= pos;
 			pos = 0;
 			len = fill_buffer(p,buf,bufsize,len);
@@ -377,7 +377,7 @@ static bool send_multipart_data( proto *p, char *buf, int bufsize ) {
 				pos = (int)(boundary - buf);
 				proto_send_size(p,CODE_PART_DATA,buf,pos - 2);
 				// recall
-				memcpy(buf,buf+pos,len - pos);
+				memmove(buf,buf+pos,len - pos);
 				len -= pos;
 				break;
 			}
@@ -402,7 +402,7 @@ bool protocol_read_answer( proto *p ) {
 			ABORT("Connection Closed");
 		len = header[1] | (header[2] << 8) | (header[3] << 16);
 		if( buflen <= len ) {
-			while( buflen < len )
+			while( buflen <= len )
 				buflen <<= 1;
 			free(buf);
 			buf = (char*)malloc(buflen);

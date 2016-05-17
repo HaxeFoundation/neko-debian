@@ -2,9 +2,10 @@ Source: neko
 Section: interpreters
 Priority: optional
 Maintainer: Andy Li <andy@onthewings.net>
-Standards-Version: 3.9.7
+Standards-Version: 3.9.8
 Build-Depends:
 	debhelper (>= 9),
+	dh-exec (>= 0.3),
 	cmake,
 	pkg-config,
 	git,
@@ -24,6 +25,7 @@ Homepage: http://nekovm.org
 
 Package: libneko2
 Architecture: any
+Multi-Arch: same
 Section: libs
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Conflicts: neko (<< 1.8.0-2), neko-dev (<< 1.8.1)
@@ -37,6 +39,7 @@ Description: Lightweight virtual machine - shared library
 
 Package: neko-dev
 Architecture: all
+Multi-Arch: same
 Section: libdevel
 Depends: libneko2 (>= ${source:Upstream-Version}), libneko2 (<<  ${source:Upstream-Version}+1~), ${misc:Depends}
 Conflicts: neko (<< 1.8.0-2)

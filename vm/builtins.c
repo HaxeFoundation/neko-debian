@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2016 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -249,7 +249,7 @@ static value builtin_sget( value s, value p ) {
 }
 
 /**
-	$sset : string -> n:int -> c:int -> int?
+	$sset : string -> n:int -> c:anyint -> int?
 	<doc>
 	Set the [n]th char of a string to ([c] & 255).
 	Returns the char set or [null] if out of bounds.
@@ -260,13 +260,300 @@ static value builtin_sset( value s, value p, value c ) {
 	unsigned char cc;
 	val_check(s,string);
 	val_check(p,int);
-	val_check(c,int);
+	val_check(c,any_int);
 	pp = val_int(p);
 	if( pp < 0 || pp >= val_strlen(s) )
 		return val_null;
-	cc = (unsigned char)val_int(c);
+	cc = (unsigned char)val_any_int(c);
 	val_string(s)[pp] = (char)cc;
 	return alloc_int(cc);
+}
+
+// if our endian value is null, we will use hardware endianness
+#ifdef NEKO_BIG_ENDIAN
+#	define TO_BE(v)	v == val_false
+#else
+#	define TO_BE(v) v == val_true
+#endif
+
+#	define LTB32(bits)	bits = (bits >> 24) | ((bits >> 8) & 0xFF00) | ((bits << 8) & 0xFF0000) | (bits << 24)
+
+/**
+	$sget16 : string -> n:int -> bigEndian:bool -> int?
+	<doc>Return the 16 bit unsigned value at position [n] or [null] if out of bounds</doc>
+**/
+static value builtin_sget16( value s, value p, value endian ) {
+	int pp;
+	unsigned short v;
+	val_check(s,string);
+	val_check(p,int);
+	pp = val_int(p);
+	if( pp < 0 || pp+2 > val_strlen(s) )
+		return val_null;
+	v = *(unsigned short*)(val_string(s)+pp);
+	if( TO_BE(endian) )
+		v = ((v&0xFF) << 8) | (v>>8);
+	return alloc_int(v);
+}
+
+/**
+	$sset16 : s:string -> n:int -> val:anyint -> bigEndian:bool -> void
+	<doc>Set the 16 bit unsigned value at position [n] of string [s]</doc>
+**/
+static value builtin_sset16( value s, value p, value val, value endian ) {
+	int pp, v;
+	val_check(s,string);
+	val_check(p,int);
+	val_check(val,any_int);
+	pp = val_int(p);
+	if( pp < 0 || pp+2 > val_strlen(s) )
+		neko_error();
+	v = val_any_int(val);
+	if( TO_BE(endian) )
+		v = ((v&0xFF) << 8) | (v>>8);
+	*(unsigned short*)(val_string(s)+pp) = v;
+	return val_null;
+}
+
+/**
+	$sget32 : string -> n:int -> bigEndian:bool -> anyint?
+	<doc>Return the 32 bit int value at position [n] or [null] if out of bounds</doc>
+**/
+static value builtin_sget32( value s, value p, value endian ) {
+	int pp;
+	unsigned int v;
+	val_check(s,string);
+	val_check(p,int);
+	pp = val_int(p);
+	if( pp < 0 || pp+4 > val_strlen(s) )
+		return val_null;
+	v = *(unsigned int*)(val_string(s)+pp);
+	if( TO_BE(endian) ) LTB32(v);
+	return alloc_best_int(v);
+}
+
+/**
+	$sset32 : s:string -> n:int -> val:anyint -> bigEndian:bool -> void
+	<doc>Set the 32 bit unsigned value at position [n] of string [s]</doc>
+**/
+static value builtin_sset32( value s, value p, value val, value endian ) {
+	int pp, v;
+	val_check(s,string);
+	val_check(p,int);
+	val_check(val,int);
+	pp = val_int(p);
+	if( pp < 0 || pp+4 > val_strlen(s) )
+		neko_error();
+	v = val_int(val);
+	if( TO_BE(endian) )
+		LTB32(v);
+	*(unsigned int*)(val_string(s)+pp) = v;
+	return val_null;
+}
+
+/**
+	$sgetf : string -> n:int -> bigEndian:bool -> float?
+	<doc>Return the single precision float value at position [n] or [null] if out of bounds</doc>
+**/
+static value builtin_sgetf( value s, value p, value endian ) {
+	int pp;
+	float f;
+	val_check(s,string);
+	val_check(p,int);
+	pp = val_int(p);
+	if( pp < 0 || pp+4 > val_strlen(s) )
+		return val_null;
+	if( TO_BE(endian) ) {
+		unsigned int bits;
+		bits = *(unsigned int*)(val_string(s)+pp);
+		LTB32(bits);
+		f = *(float*)(&bits);
+	} else
+		f = *(float*)(val_string(s)+pp);
+	return alloc_float(f);
+}
+
+/**
+	$ssetf : s:string -> n:int -> val:float -> bigEndian:bool -> void
+	<doc>Set the single precision float value at position [n] of string [s]</doc>
+**/
+static value builtin_ssetf( value s, value p, value val, value endian ) {
+	int pp;
+	float f;
+	val_check(s,string);
+	val_check(p,int);
+	val_check(val,float);
+	pp = val_int(p);
+	if( pp < 0 || pp+4 > val_strlen(s) )
+		neko_error();
+	f = (float)val_float(val);
+	if( TO_BE(endian) ) {
+		unsigned int bits = *(unsigned int *)&f;
+		LTB32(bits);
+		*(unsigned int*)(val_string(s)+pp) = bits;
+	} else
+		*(float*)(val_string(s)+pp) = f;
+	return val_null;
+}
+
+/**
+	$sgetd : string -> n:int -> float?
+	<doc>Return the double precision float value at position [n] or [null] if out of bounds</doc>
+**/
+static value builtin_sgetd( value s, value p, value endian ) {
+	int pp;
+	double f;
+	val_check(s,string);
+	val_check(p,int);
+	pp = val_int(p);
+	if( pp < 0 || pp+8 > val_strlen(s) )
+		return val_null;
+	if( TO_BE(endian) ) {
+		const unsigned char *p = (unsigned char*)(val_string(s) + pp);
+		union {
+			unsigned char bytes[8];
+			double f;
+		} s;
+		s.bytes[0] = p[7];
+		s.bytes[1] = p[6];
+		s.bytes[2] = p[5];
+		s.bytes[3] = p[4];
+		s.bytes[4] = p[3];
+		s.bytes[5] = p[2];
+		s.bytes[6] = p[1];
+		s.bytes[7] = p[0];
+		f = s.f;
+	} else
+		f = *(double*)(val_string(s)+pp);
+	return alloc_float(f);
+}
+
+/**
+	$ssetd : s:string -> n:int -> val:float -> bigEndian:bool -> void
+	<doc>Set the double precision float value at position [n] of string [s]</doc>
+**/
+static value builtin_ssetd( value s, value p, value val, value endian ) {
+	int pp;
+	double f;
+	val_check(s,string);
+	val_check(p,int);
+	val_check(val,float);
+	pp = val_int(p);
+	if( pp < 0 || pp+8 > val_strlen(s) )
+		neko_error();
+	f = (double)val_float(val);
+	if( TO_BE(endian) ) {
+		unsigned char *p = (unsigned char*)(val_string(s) + pp);
+		union {
+			unsigned char bytes[8];
+			double f;
+		} s;
+		s.f = f;
+		*p = s.bytes[7]; p++;
+		*p = s.bytes[6]; p++;
+		*p = s.bytes[5]; p++;
+		*p = s.bytes[4]; p++;
+		*p = s.bytes[3]; p++;
+		*p = s.bytes[2]; p++;
+		*p = s.bytes[1]; p++;
+		*p = s.bytes[0];
+	} else
+		*(double*)(val_string(s)+pp) = f;
+	return val_null;
+}
+
+/**
+	// $itof : anyint -> float
+	<doc>Convert the low endian bytes integer to the corresponding float value</doc>
+**/
+static value builtin_itof( value v, value endian ) {
+	int bits;
+	float f;
+	val_check(v,any_int);
+	bits = val_any_int(v);
+	if( TO_BE(endian) ) LTB32(bits);
+	f = *(float*)&bits;
+	return alloc_float(f);
+}
+
+/**
+	$ftod : float -> anyint
+	<doc>Returns the binary integer representation of the float value</doc>
+**/
+static value builtin_ftoi( value v, value endian ) {
+	int bits;
+	float f;
+	val_check(v,float);
+	f = (float)val_float(v);
+	bits = *(int *)&f;
+	if( TO_BE(endian) ) LTB32(bits);
+	return alloc_best_int(bits);
+}
+
+/**
+	$itod : low:anyint -> high:anyint -> float
+	<doc>Convert the low endian bytes integers to the corresponding double value</doc>
+**/
+static value builtin_itod( value low, value high, value endian ) {
+	union {
+		unsigned int i[2];
+		double d;
+	} s;
+	val_check(low,any_int);
+	val_check(high,any_int)
+	if( TO_BE(endian) ) {
+		unsigned int bits;
+		bits = val_any_int(low);
+		LTB32(bits);
+		s.i[1] = bits;
+		bits = val_any_int(high);
+		LTB32(bits);
+		s.i[0] = bits;
+	} else {
+		s.i[0] = val_any_int(low);
+		s.i[1] = val_any_int(high);
+	}
+	return alloc_float(s.d);
+}
+
+/**
+	$dtoi : float -> anyint array -> void
+	<doc>Save the low endian bytes representation of the double value into the array as two any int</doc>
+**/
+static value builtin_dtoi( value v, value out, value endian ) {
+	union {
+		unsigned int i[2];
+		double d;
+	} s;
+	val_check(v,float);
+	val_check(out,array);
+	if( val_array_size(out) < 2 ) neko_error();
+	s.d = val_float(v);
+	if( TO_BE(endian) ) {
+		unsigned int bits;
+		bits = s.i[0];
+		LTB32(bits);
+		val_array_ptr(out)[1] = alloc_best_int(bits);
+		bits = s.i[1];
+		LTB32(bits);
+		val_array_ptr(out)[0] = alloc_best_int(bits);
+	} else {
+		val_array_ptr(out)[0] = alloc_best_int(s.i[0]);
+		val_array_ptr(out)[1] = alloc_best_int(s.i[1]);
+	}
+	return val_null;
+}
+
+/**
+	$isbigendian : void -> bool
+	<doc>Tells if we are on a big endian CPU or not.</doc>
+**/
+static value builtin_isbigendian() {
+#ifdef NEKO_BIG_ENDIAN
+	return val_true;
+#else
+	return val_false;
+#endif
 }
 
 /**
@@ -607,7 +894,7 @@ static value builtin_varargs( value f ) {
 /** <doc><h2>Number Builtins</h2></doc> **/
 
 /**
-	$iadd : any -> any -> int
+	$iadd : anyint -> anyint -> anyint
 	<doc>Add two integers</doc>
 **/
 static value builtin_iadd( value a, value b ) {
@@ -615,7 +902,7 @@ static value builtin_iadd( value a, value b ) {
 }
 
 /**
-	$isub : any -> any -> int
+	$isub : anyint -> anyint -> anyint
 	<doc>Subtract two integers</doc>
 **/
 static value builtin_isub( value a, value b ) {
@@ -623,7 +910,7 @@ static value builtin_isub( value a, value b ) {
 }
 
 /**
-	$imult : any -> any -> int
+	$imult : anyint -> anyint -> anyint
 	<doc>Multiply two integers</doc>
 **/
 static value builtin_imult( value a, value b ) {
@@ -631,7 +918,7 @@ static value builtin_imult( value a, value b ) {
 }
 
 /**
-	$idiv : any -> any -> int
+	$idiv : anyint -> anyint -> anyint
 	<doc>Divide two integers. An error occurs if division by 0</doc>
 **/
 static value builtin_idiv( value a, value b ) {
@@ -1247,6 +1534,21 @@ void neko_init_builtins() {
 	BUILTIN(sset,3);
 	BUILTIN(sblit,5);
 	BUILTIN(sfind,3);
+
+	BUILTIN(sget16,3);
+	BUILTIN(sget32,3);
+	BUILTIN(sgetf,3);
+	BUILTIN(sgetd,3);
+	BUILTIN(sset16,4);
+	BUILTIN(sset32,4);
+	BUILTIN(ssetf,4);
+	BUILTIN(ssetd,4);
+
+	BUILTIN(itof,2);
+	BUILTIN(itod,3);
+	BUILTIN(ftoi,2);
+	BUILTIN(dtoi,3);
+	BUILTIN(isbigendian,0);
 
 	BUILTIN(new,1);
 	BUILTIN(objget,2);

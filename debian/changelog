@@ -1,3 +1,18 @@
+neko (2.1.0-1) unstable; urgency=low
+
+  * New upstream version.
+    + Upstream now uses CMake to build.
+    + libneko is now versioned in upstream. (libneko2)
+    + The "nekotools booted" binaries can now be stripped correctly.
+    + Use MariaDB for compiling mysql.ndll.
+    + Updated d/copyright.
+  * Converted libneko to Multi-Arch: same.
+  * Fixed shlibdeps for the neko package.
+  * Updated d/watch pattern.
+  * Bump Standards-Version to 3.9.8 (no changes).
+
+ -- Andy Li <andy@onthewings.net>  Sat, 14 May 2016 16:31:18 +0800
+
 neko (2.0.0-4) unstable; urgency=low
 
   * Adopt package (Closes: #628939).
