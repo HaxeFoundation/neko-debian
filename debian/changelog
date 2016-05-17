@@ -6,6 +6,7 @@ neko (2.1.0-1) unstable; urgency=low
     + The "nekotools booted" binaries can now be stripped correctly.
     + Use MariaDB for compiling mysql.ndll.
     + Updated d/copyright.
+  * Converted libneko to Multi-Arch: same.
   * Fixed shlibdeps for the neko package.
   * Updated d/watch pattern.
   * Bump Standards-Version to 3.9.8 (no changes).
