@@ -11,7 +11,6 @@ Build-Depends:
 	libgc-dev,
 	dh-apache2,
 	apache2-dev,
-	libssl-dev,
 	libmariadb-client-lgpl-dev-compat | libmysqlclient-dev,
 	libsqlite3-dev,
 	libpcre3-dev,
