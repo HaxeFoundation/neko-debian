@@ -7,10 +7,11 @@ neko (2.1.0-1) unstable; urgency=low
     + Use MariaDB for compiling mysql.ndll.
     + Updated d/copyright.
   * Fixed shlibdeps for the neko package.
+  * Removed patches applied to upstream. Updated hurd.diff.
   * Updated d/watch pattern.
   * Bump Standards-Version to 3.9.8 (no changes).
 
- -- Andy Li <andy@onthewings.net>  Sat, 14 May 2016 16:31:18 +0800
+ -- Andy Li <andy@onthewings.net>  Thu, 19 May 2016 22:00:37 +0800
 
 neko (2.0.0-4) unstable; urgency=low
 

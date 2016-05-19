@@ -1,0 +1,145 @@
+Description: Fix compile errors on hurd-i386. Committed in upstream: https://github.com/HaxeFoundation/neko/commit/d7e1293a712e5996b1fdd617fa370e8c420e841f
+From d7e1293a712e5996b1fdd617fa370e8c420e841f Mon Sep 17 00:00:00 2001
+From: Andy Li <andy@onthewings.net>
+Date: Wed, 18 May 2016 03:48:15 +0800
+Subject: [PATCH] Compile fix for GNU Hurd. See
+ https://github.com/HaxeFoundation/neko-debian/blob/2.0.0-4/debian/patches/hurd.diff
+
+---
+ libs/common/osdef.h |  8 ++++++--
+ libs/std/sys.c      | 17 ++++++++++++++++-
+ vm/main.c           |  4 +++-
+ vm/neko.h.in        |  8 ++++++--
+ 4 files changed, 31 insertions(+), 6 deletions(-)
+
+diff --git a/libs/common/osdef.h b/libs/common/osdef.h
+index 1daebb9..78266bf 100644
+--- a/libs/common/osdef.h
++++ b/libs/common/osdef.h
+@@ -26,7 +26,7 @@
+ #	define OS_WINDOWS
+ #endif
+ 
+-#if defined(__APPLE__) || defined(__MACH__) || defined(macintosh)
++#if defined(__APPLE__) || defined(macintosh)
+ #	define OS_MAC
+ #endif
+ 
+@@ -38,7 +38,11 @@
+ #	define OS_BSD
+ #endif
+ 
+-#if defined(NEKO_LINUX) || defined(NEKO_MAC) || defined(NEKO_BSD) || defined(NEKO_GNUKBSD)
++#if defined(__GNU__)
++#	define OS_HURD
++#endif
++
++#if defined(OS_LINUX) || defined(OS_MAC) || defined(OS_BSD) || defined(OS_GNUKBSD) || defined (OS_HURD)
+ #	define OS_POSIX
+ #endif
+ 
+diff --git a/libs/std/sys.c b/libs/std/sys.c
+index 8003d41..9fa1b12 100644
+--- a/libs/std/sys.c
++++ b/libs/std/sys.c
+@@ -198,6 +198,8 @@ static value sys_string() {
+ 	return alloc_string("Linux");
+ #elif defined(NEKO_BSD)
+ 	return alloc_string("BSD");
++#elif defined(NEKO_HURD)
++	return alloc_string("GNU/Hurd");
+ #elif defined(NEKO_MAC)
+ 	return alloc_string("Mac");
+ #else
+@@ -537,6 +539,14 @@ static value file_full_path( value path ) {
+ 	if( GetFullPathName(val_string(path),MAX_PATH+1,buf,NULL) == 0 )
+ 		neko_error();
+ 	return alloc_string(buf);
++#elif defined(__GLIBC__)
++	val_check(path,string);
++	char *buf = realpath(val_string(path), NULL);
++	if( buf == NULL )
++		neko_error();
++	value ret = alloc_string(buf);
++	free(buf);
++	return ret;
+ #else
+ 	char buf[PATH_MAX];
+ 	val_check(path,string);
+@@ -562,7 +572,7 @@ static value sys_exe_path() {
+ 	if( _NSGetExecutablePath(path, &path_len) )
+ 		neko_error();
+ 	return alloc_string(path);
+-#else
++#elif defined(NEKO_LINUX)
+ 	const char *p = getenv("_");
+ 	if( p != NULL )
+ 		return alloc_string(p);
+@@ -574,6 +584,11 @@ static value sys_exe_path() {
+ 	    path[length] = '\0';
+ 		return alloc_string(path);
+ 	}
++#else
++	const char *p = getenv("_");
++	if( p != NULL )
++		return alloc_string(p);
++	neko_error();
+ #endif
+ }
+ 
+diff --git a/vm/main.c b/vm/main.c
+index c996a9f..2c21696 100644
+--- a/vm/main.c
++++ b/vm/main.c
+@@ -91,7 +91,7 @@ static char *executable_path() {
+         sysctl(mib, 4, path, &cb, NULL, 0);
+         if (!cb) return NULL;
+         return path;
+-#else
++#elif defined(NEKO_LINUX)
+ 	static char path[200];
+ 	int length = readlink("/proc/self/exe", path, sizeof(path));
+ 	if( length < 0 || length >= 200 ) {
+@@ -102,6 +102,8 @@ static char *executable_path() {
+ 	}
+ 	path[length] = '\0';
+ 	return path;
++#else
++	return getenv("_");
+ #endif
+ }
+ 
+diff --git a/vm/neko.h.in b/vm/neko.h.in
+index bb9ec1b..2009678 100644
+--- a/vm/neko.h.in
++++ b/vm/neko.h.in
+@@ -27,7 +27,7 @@
+ #	define NEKO_WINDOWS
+ #endif
+ 
+-#if defined(__APPLE__) || defined(__MACH__) || defined(macintosh)
++#if defined(__APPLE__) || defined(macintosh)
+ #	define NEKO_MAC
+ #endif
+ 
+@@ -43,6 +43,10 @@
+ #	define NEKO_BSD
+ #endif
+ 
++#if defined(__GNU__)
++#	define NEKO_HURD
++#endif
++
+ // COMPILER/PROCESSOR FLAGS
+ #if defined(__GNUC__)
+ #	define NEKO_GCC
+@@ -70,7 +74,7 @@
+ #	define NEKO_64BITS
+ #endif
+ 
+-#if defined(NEKO_LINUX) || defined(NEKO_MAC) || defined(NEKO_BSD) || defined(NEKO_GNUKBSD)
++#if defined(NEKO_LINUX) || defined(NEKO_MAC) || defined(NEKO_BSD) || defined(NEKO_GNUKBSD) || defined(NEKO_HURD)
+ #	define NEKO_POSIX
+ #endif
+ 
+
