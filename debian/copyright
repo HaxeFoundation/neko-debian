@@ -17,7 +17,7 @@ License: Apache
 
 Files: cmake/FindMariaDBConnector.cmake
 Copyright: 2013-2014, MariaDB Corporation Ab
-License: GPL-2.0
+License: GPL-2
 
 Files: cmake/FindMbedTLS.cmake
 Copyright:
