@@ -1,3 +1,10 @@
+neko (2.1.0-2) unstable; urgency=low
+
+  * Added upstream patch, mincoming-stack-boundary.diff, that avoids
+    using unavailable compiler flag (Closes: #825903).
+
+ -- Andy Li <andy@onthewings.net>  Tue, 07 Jun 2016 08:16:58 +0800
+
 neko (2.1.0-1) unstable; urgency=low
 
   * New upstream version.
