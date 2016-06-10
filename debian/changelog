@@ -1,3 +1,14 @@
+neko (2.1.0-3) unstable; urgency=medium
+
+  * Added upstream patches
+    + boot-c-1.diff and boot-c-2.diff: build nekoc, nekoml, and 
+      nekotools with "nekotools boot -c file.n", such that the 
+      output will be valid binaries.
+    + tests-1.diff and tests-2.diff: add tests that run nekoc,
+      nekoml, and nekotools.
+
+ -- Andy Li <andy@onthewings.net>  Fri, 10 Jun 2016 18:21:00 +0800
+
 neko (2.1.0-2) unstable; urgency=low
 
   * Added upstream patch, mincoming-stack-boundary.diff, that avoids

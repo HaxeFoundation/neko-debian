@@ -1,0 +1,50 @@
+From a2e010578ec40ca79b6b33b8b1e281549692296d Mon Sep 17 00:00:00 2001
+From: Andy Li <andy@onthewings.net>
+Date: Thu, 12 May 2016 16:14:48 +0800
+Subject: [PATCH] added test to run nekoc, nekoml, and nekotools
+
+---
+ CMakeLists.txt | 22 ++++++++++++++++------
+ 1 file changed, 16 insertions(+), 6 deletions(-)
+
+Index: neko-debian/CMakeLists.txt
+===================================================================
+--- neko-debian.orig/CMakeLists.txt
++++ neko-debian/CMakeLists.txt
+@@ -381,11 +381,6 @@ if(UNIX)
+ 	target_link_libraries(libneko dl m ${CMAKE_THREAD_LIBS_INIT})
+ endif()
+ 
+-set_target_properties(nekovm
+-	PROPERTIES
+-	OUTPUT_NAME neko
+-)
+-
+ set_target_properties(nekovm libneko
+ 	PROPERTIES
+ 	OUTPUT_NAME neko
+@@ -1344,8 +1339,23 @@ add_test(NAME test.n
+ 	WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+ )
+ 
++add_test(NAME nekoc
++	COMMAND nekoc
++	WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
++)
++
++add_test(NAME nekoml
++	COMMAND nekoc
++	WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
++)
++
++add_test(NAME nekotools
++	COMMAND nekoc
++	WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
++)
++
+ if (UNIX AND NOT APPLE)
+-	set_tests_properties(-version test.n
++	set_tests_properties(-version test.n nekoc nekoml nekotools
+ 		PROPERTIES
+ 		ENVIRONMENT LD_LIBRARY_PATH=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+ 	)
