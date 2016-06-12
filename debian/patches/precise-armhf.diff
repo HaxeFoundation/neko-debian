@@ -1,0 +1,18 @@
+Subject: fixed compilation of MbedTLS on armhf
+ See https://tls.mbed.org/kb/development/arm-thumb-error-r7-cannot-be-used-in-asm-here
+
+---
+
+Index: neko-debian/CMakeLists.txt
+===================================================================
+--- neko-debian.orig/CMakeLists.txt
++++ neko-debian/CMakeLists.txt
+@@ -951,7 +951,7 @@ if (STATIC_MBEDTLS)
+ 		list(APPEND MBEDTLS_CMAKE_ARGS
+ 			-DLINK_WITH_PTHREAD=ON
+ 			-DCMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES}
+-			${ARG_PIC}
++			"-DCMAKE_C_FLAGS=-fPIC -fomit-frame-pointer"
+ 		)
+ 	endif()
+ 	ExternalProject_Add(MbedTLS
