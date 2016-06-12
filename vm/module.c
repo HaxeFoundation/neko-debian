@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2016 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -352,7 +352,7 @@ neko_module *neko_read_module( reader r, readp p, value loader ) {
 	READ_LONG(m->nglobals);
 	READ_LONG(m->nfields);
 	READ_LONG(m->codesize);
-	if( m->nglobals < 0 || m->nglobals > 0xFFFF || m->nfields < 0 || m->nfields > 0xFFFF || m->codesize < 0 || m->codesize > 0xFFFFF )
+	if( (int)m->nglobals < 0 || m->nglobals > 0xFFFF || (int)m->nfields < 0 || m->nfields > 0xFFFF || (int)m->codesize < 0 || m->codesize > 0xFFFFFF )
 		ERROR();
 	tmp = (char*)malloc(sizeof(char)*(((m->codesize+1)>MAXSIZE)?(m->codesize+1):MAXSIZE));
 	m->jit = NULL;

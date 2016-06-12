@@ -2,13 +2,25 @@ Source: neko
 Section: interpreters
 Priority: optional
 Maintainer: Andy Li <andy@onthewings.net>
-Standards-Version: 3.9.6
-Build-Depends: debhelper (>= 9), pkg-config, libgc-dev, apache2-dev, libmysqlclient-dev, libsqlite3-dev, libpcre3-dev, libapr1-dev, libgtk2.0-dev, bash-completion
+Standards-Version: 3.9.8
+Build-Depends:
+	debhelper (>= 9),
+	cmake,
+	pkg-config,
+	git,
+	libgc-dev,
+	apache2-dev,
+	libmariadb-client-lgpl-dev-compat | libmysqlclient-dev,
+	libsqlite3-dev,
+	libpcre3-dev,
+	libapr1-dev,
+	libgtk2.0-dev,
+	bash-completion
 Vcs-Git: https://github.com/HaxeFoundation/neko-debian.git
 Vcs-Browser: https://github.com/HaxeFoundation/neko-debian
 Homepage: http://nekovm.org
 
-Package: libneko0
+Package: libneko2
 Architecture: any
 Section: libs
 Depends: ${shlibs:Depends}, ${misc:Depends}
@@ -24,7 +36,7 @@ Description: Lightweight virtual machine - shared library
 Package: neko-dev
 Architecture: all
 Section: libdevel
-Depends: libneko0 (>= ${source:Upstream-Version}), libneko0 (<<  ${source:Upstream-Version}+1~), ${misc:Depends}
+Depends: libneko2 (>= ${source:Upstream-Version}), libneko2 (<<  ${source:Upstream-Version}+1~), ${misc:Depends}
 Conflicts: neko (<< 1.8.0-2)
 Description: Lightweight virtual machine - headers
  Neko provides a common runtime for several different languages,

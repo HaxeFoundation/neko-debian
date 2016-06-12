@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2016 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -28,12 +28,15 @@
 #	define CLASS_NAME "Neko_UI_wnd_class"
 #	define WM_SYNC_CALL	(WM_USER + 101)
 #elif defined(NEKO_MAC)
+#	undef lock_acquire
+#	undef lock_release
+#	undef lock_try
 #	include <Carbon/Carbon.h>
 #	include <pthread.h>
 #	define UIEvent		0xFFFFAA00
 #	define eCall		0x0
 enum { pFunc = 'func' };
-#elif defined(NEKO_LINUX)
+#else
 #	include <gtk/gtk.h>
 #	include <glib.h>
 #	include <pthread.h>
@@ -57,7 +60,7 @@ typedef struct {
 	HWND wnd;
 #elif defined(NEKO_MAC)
 	pthread_t tid;
-#elif defined(NEKO_LINUX)
+#else
 	pthread_t tid;
 	pthread_mutex_t lock;
 #endif
@@ -148,7 +151,6 @@ void ui_main() {
 	EventTypeSpec ets = { UIEvent, eCall };
 	InstallEventHandler(GetApplicationEventTarget(),NewEventHandlerUPP(handleEvents),1,&ets,0,0);
 #	elif defined(NEKO_LINUX)
-	g_thread_init(NULL);
 	gdk_threads_init();
 	gtk_init(NULL,NULL);
 	setlocale(LC_NUMERIC,"POSIX"); // prevent broking atof()

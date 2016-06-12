@@ -1,3 +1,2 @@
-bin/*.so usr/lib
-vm/neko*.h usr/include
-
+usr/lib/*.so usr/lib
+usr/include/* usr/include

@@ -2,7 +2,7 @@
 ## debian/rules for neko.
 
 %:
-	dh $@ --with bash-completion
+	dh $@ --builddirectory=build --with bash-completion
 
 ## Both AMD64 and all kFreeBSDs seem to have problems with the type
 ## punning used in the Neko source.
@@ -13,20 +13,15 @@ ifeq (kfreebsd,$(DEB_HOST_ARCH_OS))
 export DEB_CFLAGS_MAINT_APPEND = -fno-strict-aliasing
 endif
 
-override_dh_auto_build:
-	dh_auto_build -- \
-		CFLAGS="$(CFLAGS) -Wall -fPIC -I vm -DCOMPACT_TABLE -D_GNU_SOURCE -I libs/common" \
-		EXTFLAGS="$(LDFLAGS) -pthread" \
-		STD_NDLL_FLAGS="$(LDFLAGS) -Lbin -lneko -lm -lrt"
+override_dh_auto_configure:
+	dh_auto_configure -- -DSTATIC_DEPS=MbedTLS -DCMAKE_SKIP_RPATH=ON -DRUN_LDCONFIG=OFF
+	mkdir -p build/libs/src
+	cp debian/mbedtls-2.2.1-apache.tgz build/libs/src/mbedtls-2.2.1-apache.tgz
 
-override_dh_auto_install:
-
-override_dh_strip:
-	dh_strip -Xnekoc -Xnekotools
-
-override_dh_fixperms:
-	dh_fixperms
-	find $(CURDIR)/debian -name '*.ndll' -exec chmod -x '{}' ';'
+# dh_shlibdeps does not see the ndll files as libraries, so we call dpkg-shlibdeps manually
+override_dh_shlibdeps:
+	dh_shlibdeps
+	dpkg-shlibdeps -Tdebian/neko.substvars debian/neko/usr/bin/* debian/neko/usr/lib/neko/*.ndll
 
 get-orig-source:
 	uscan --verbose --rename --force-download
