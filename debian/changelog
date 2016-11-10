@@ -1,3 +1,9 @@
+neko (2.1.0-4) unstable; urgency=medium
+
+  * Updated dependencies of mariadb and mysql (Closes: #843841).
+
+ -- Andy Li <andy@onthewings.net>  Thu, 10 Nov 2016 22:56:04 +0800
+
 neko (2.1.0-3) unstable; urgency=medium
 
   * Added upstream patches
