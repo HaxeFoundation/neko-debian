@@ -1,0 +1,2 @@
+usr/lib/@DEB_HOST_MULTIARCH@/neko/* usr/lib/@DEB_HOST_MULTIARCH@/neko/
+usr/bin/* usr/bin
