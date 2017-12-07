@@ -13,8 +13,14 @@ ifeq (kfreebsd,$(DEB_HOST_ARCH_OS))
 export DEB_CFLAGS_MAINT_APPEND = -fno-strict-aliasing
 endif
 
+DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
+
 override_dh_auto_configure:
-	dh_auto_configure -- -DCMAKE_SKIP_RPATH=ON -DRUN_LDCONFIG=OFF
+	dh_auto_configure -- \
+		-DCMAKE_INSTALL_INCLUDEDIR=include/$(DEB_HOST_MULTIARCH) \
+		-DCMAKE_INSTALL_LIBDIR=lib/$(DEB_HOST_MULTIARCH) \
+		-DCMAKE_SKIP_RPATH=ON \
+		-DRUN_LDCONFIG=OFF
 
 # dh_shlibdeps does not see the ndll files as libraries, so we call dpkg-shlibdeps manually
 override_dh_shlibdeps:
