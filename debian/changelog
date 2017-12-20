@@ -3,6 +3,7 @@ neko (2.2.0-1) unstable; urgency=low
   * New upstream version.
   * Removed patches applied to upstream.
   * Convert to multiarch.
+  * Add dh_missing --fail-missing check.
   * Updated d/watch to match new upstream download links.
   * Bump Standards-Version to 4.1.2 (no changes).
   * Disable parallel build since it is only supported by upstream
