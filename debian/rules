@@ -2,7 +2,7 @@
 ## debian/rules for neko.
 
 %:
-	dh $@ --with apache2,bash-completion
+	dh $@ --no-parallel --with apache2,bash-completion
 
 ## Both AMD64 and all kFreeBSDs seem to have problems with the type
 ## punning used in the Neko source.
