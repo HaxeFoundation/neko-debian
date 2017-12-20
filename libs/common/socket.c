@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2016 Haxe Foundation
+ * Copyright (C)2005-2017 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -120,7 +120,7 @@ PHOST phost_resolve( const char *host ) {
 	PHOST ip = inet_addr(host);
 	if( ip == INADDR_NONE ) {
 		struct hostent *h;
-#	if defined(OS_WINDOWS) || defined(OS_MAC)
+#	if defined(OS_WINDOWS) || defined(OS_MAC) || defined(OS_CYGWIN)
 		h = gethostbyname(host);
 #	else
 		struct hostent hbase;

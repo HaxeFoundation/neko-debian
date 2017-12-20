@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2016 Haxe Foundation
+ * Copyright (C)2005-2017 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -27,7 +27,7 @@
 // original code by Steve Reid
 
 #define rol(value, bits) (((value) << (bits)) | ((value) >> (32 - (bits))))
-#ifdef IS_BIG_ENDIAN
+#ifdef NEKO_BIG_ENDIAN
 #	define blk0(i) block[i]
 #else
 #	define blk0(i) (block[i] = (rol(block[i],24)&0xFF00FF00) \

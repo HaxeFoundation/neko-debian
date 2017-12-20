@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2016 Haxe Foundation
+ * Copyright (C)2005-2017 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -27,7 +27,7 @@
 #	define NEKO_WINDOWS
 #endif
 
-#if defined(__APPLE__) || defined(__MACH__) || defined(macintosh)
+#if defined(__APPLE__) || defined(macintosh)
 #	define NEKO_MAC
 #endif
 
@@ -41,6 +41,10 @@
 
 #if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
 #	define NEKO_BSD
+#endif
+
+#if defined(__GNU__)
+#	define NEKO_HURD
 #endif
 
 // COMPILER/PROCESSOR FLAGS
@@ -58,6 +62,10 @@
 #	define NEKO_MINGW
 #endif
 
+#if defined(__CYGWIN__)
+#	define NEKO_CYGWIN
+#endif
+
 #if defined(__i386__) || defined(_WIN32)
 #	define NEKO_X86
 #endif
@@ -70,7 +78,7 @@
 #	define NEKO_64BITS
 #endif
 
-#if defined(NEKO_LINUX) || defined(NEKO_MAC) || defined(NEKO_BSD) || defined(NEKO_GNUKBSD)
+#if defined(NEKO_LINUX) || defined(NEKO_MAC) || defined(NEKO_BSD) || defined(NEKO_GNUKBSD) || defined(NEKO_HURD) || defined(NEKO_CYGWIN)
 #	define NEKO_POSIX
 #endif
 
@@ -88,10 +96,27 @@
 #	include <stdint.h>
 #endif
 
+#cmakedefine NEKO_XLOCALE_H
+
+#cmakedefine NEKO_BIG_ENDIAN
+
+#ifndef NEKO_BIG_ENDIAN
+#	define NEKO_LITTLE_ENDIAN
+#endif
+
+#cmakedefine NEKO_JIT_DISABLE
+#cmakedefine NEKO_JIT_DEBUG
+
+#if !defined(NEKO_JIT_DISABLE) && defined(NEKO_X86) && !defined(NEKO_MAC) && !defined(_WIN64)
+#define NEKO_JIT_ENABLE
+#endif
+
 #define NEKO_VERSION_MAJOR	@NEKO_VERSION_MAJOR@
 #define NEKO_VERSION_MINOR	@NEKO_VERSION_MINOR@
 #define NEKO_VERSION_PATCH	@NEKO_VERSION_PATCH@
 #define NEKO_VERSION		@NEKO_VERSION_MAJOR@@NEKO_VERSION_MINOR@@NEKO_VERSION_PATCH@
+
+#define NEKO_MODULE_PATH	"@NEKO_MODULE_PATH@"
 
 typedef intptr_t int_val;
 
@@ -196,10 +221,10 @@ struct _mt_lock;
 typedef struct _mt_local mt_local;
 typedef struct _mt_lock mt_lock;
 
-#define TAG_BITS			4
+#define NEKO_TAG_BITS		4
 
 #define val_tag(v)			(*(val_type*)(v))
-#define val_short_tag(v)	(val_tag(v)&((1<<TAG_BITS) - 1))
+#define val_short_tag(v)	(val_tag(v)&((1<<NEKO_TAG_BITS) - 1))
 #define val_is_null(v)		((v) == val_null)
 #define val_is_int(v)		((((int)(int_val)(v)) & 1) != 0)
 #define val_is_any_int(v)	(val_is_int(v) || val_tag(v) == VAL_INT32)
@@ -228,18 +253,18 @@ typedef struct _mt_lock mt_lock;
 #define val_number(v)		(val_is_int(v)?val_int(v):((val_tag(v)==VAL_FLOAT)?val_float(v):val_int32(v)))
 #define val_hdata(v)		((vhash*)val_data(v))
 #define val_string(v)		(&((vstring*)(v))->c)
-#define val_strlen(v)		((signed)(((unsigned)val_tag(v)) >> TAG_BITS))
-#define val_set_length(v,l) val_tag(v) = val_short_tag(v) | ((l) << TAG_BITS)
+#define val_strlen(v)		((signed)(((unsigned)val_tag(v)) >> NEKO_TAG_BITS))
+#define val_set_length(v,l) val_tag(v) = val_short_tag(v) | ((l) << NEKO_TAG_BITS)
 #define val_set_size		val_set_length
 
-#define val_array_size(v)	((signed)(((unsigned)val_tag(v)) >> TAG_BITS))
+#define val_array_size(v)	((signed)(((unsigned)val_tag(v)) >> NEKO_TAG_BITS))
 #define val_array_ptr(v)	(&((varray*)(v))->ptr)
 #define val_fun_nargs(v)	((vfunction*)(v))->nargs
 #define alloc_int(v)		((value)(int_val)((((int)(v)) << 1) | 1))
 #define alloc_bool(b)		((b)?val_true:val_false)
 
-#define max_array_size		((1 << (32 - TAG_BITS)) - 1)
-#define max_string_size		((1 << (32 - TAG_BITS)) - 1)
+#define max_array_size		((1 << (32 - NEKO_TAG_BITS)) - 1)
+#define max_string_size		((1 << (32 - NEKO_TAG_BITS)) - 1)
 #define invalid_comparison	0xFE
 
 #undef EXTERN

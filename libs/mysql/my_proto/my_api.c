@@ -1,6 +1,6 @@
 /*
  * MYSQL 5.0 Protocol Implementation
- * Copyright (C)2005-2016 Haxe Foundation
+ * Copyright (C)2005-2017 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -254,7 +254,7 @@ int mysql_select_db( MYSQL *m, const char *dbname ) {
 	int pcount = 0;
 	myp_begin_packet(p,0);
 	myp_write_byte(p,COM_INIT_DB);
-	myp_write_string(p,dbname);
+	myp_write_string_eof(p,dbname);
 	if( !myp_send_packet(m,p,&pcount) ) {
 		error(m,"Failed to send packet",NULL);
 		return -1;

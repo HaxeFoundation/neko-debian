@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2016 Haxe Foundation
+ * Copyright (C)2005-2017 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -36,10 +36,6 @@
 #define tmp_alloc(size) malloc(size)
 #define tmp_free(ptr)	free(ptr)
 
-#if defined(NEKO_X86) && !defined(NEKO_MAC)
-#define JIT_ENABLE
-#endif
-
 #ifdef NEKO_MAC
 #define STACK_ALIGN
 #endif
@@ -49,11 +45,9 @@
 #define STACK_ALIGN_DEBUG
 #endif
 
-#define TAG_MASK		((1<<TAG_BITS)-1)
+#define TAG_MASK		((1<<NEKO_TAG_BITS)-1)
 
-//#define JIT_DEBUG
-
-#ifdef JIT_ENABLE
+#ifdef NEKO_JIT_ENABLE
 
 #define PARAMETER_TABLE
 #include "opcodes.h"
@@ -579,7 +573,7 @@ static void debug_method_call( int line, int stack ) {
 }
 #endif
 
-#ifdef JIT_DEBUG
+#ifdef NEKO_JIT_DEBUG
 
 static void val_print_2( value v ) {
 	val_print(alloc_string(" "));
@@ -960,7 +954,7 @@ static void jit_call_prim( jit_ctx *ctx, int nargs, int mode ) {
 	for(i=0;i<nargs;i++) {
 		XPush_p(SP,FIELD(i));
 	}
-#	ifndef JIT_DEBUG
+#	ifndef NEKO_JIT_DEBUG
 	pop(nargs);
 #	endif
 
@@ -971,7 +965,7 @@ static void jit_call_prim( jit_ctx *ctx, int nargs, int mode ) {
 	end_call();
 	restore_after_call(nargs,pad_size);
 
-#	ifdef JIT_DEBUG
+#	ifdef NEKO_JIT_DEBUG
 	pop(nargs);
 #	endif
 	XRet();
@@ -1504,7 +1498,7 @@ static void jit_array_access( jit_ctx *ctx, int n ) {
 
 	XJump(JNeq,jnot_array);
 	if( n > 0 ) {
-		XUShr_rc(TMP,TAG_BITS);
+		XUShr_rc(TMP,NEKO_TAG_BITS);
 		XCmp_rc(TMP,n);
 		XJump(JLte,jbounds);
 	}
@@ -1740,7 +1734,7 @@ static void jit_opcode( jit_ctx *ctx, enum OPCODE op, int p ) {
 	case AccEnv:
 		get_var_r(TMP,VEnv);
 		XMov_rp(TMP2,TMP,FIELD(0));
-		XCmp_rc(TMP2,(p << TAG_BITS) | VAL_ARRAY);
+		XCmp_rc(TMP2,(p << NEKO_TAG_BITS) | VAL_ARRAY);
 		XJump(JGt,jok);
 		runtime_error(1,false); // Reading Outside Env
 		PATCH_JUMP(jok);
@@ -1763,7 +1757,7 @@ static void jit_opcode( jit_ctx *ctx, enum OPCODE op, int p ) {
 		// check bounds & access array
 		XShr_rc(ACC,1);
 		XMov_rp(TMP2,TMP,FIELD(0));
-		XUShr_rc(TMP2,TAG_BITS);
+		XUShr_rc(TMP2,NEKO_TAG_BITS);
 		XCmp_rr(ACC,TMP2);
 		XJump(JGte,jbounds);
 		XAdd_rc(ACC,1);			  // acc = val_array_ptr(tmp)[acc]
@@ -1880,7 +1874,7 @@ static void jit_opcode( jit_ctx *ctx, enum OPCODE op, int p ) {
 	case SetEnv:
 		get_var_r(TMP,VEnv);
 		XMov_rp(TMP2,TMP,FIELD(0));
-		XCmp_rc(TMP2,(p << TAG_BITS) | VAL_ARRAY);
+		XCmp_rc(TMP2,(p << NEKO_TAG_BITS) | VAL_ARRAY);
 		XJump(JGt,jok);
 		runtime_error(2,false); // Writing Outside Env
 		PATCH_JUMP(jok);
@@ -1932,7 +1926,7 @@ static void jit_opcode( jit_ctx *ctx, enum OPCODE op, int p ) {
 
 		XMov_rp(TMP,TMP,FIELD(0)); // tmp = tmp->type
 		XShr_rc(TMP2,1);
-		XUShr_rc(TMP,TAG_BITS);
+		XUShr_rc(TMP,NEKO_TAG_BITS);
 		XCmp_rr(TMP2,TMP);
 		XJump(JGte,jend1);
 
@@ -1981,7 +1975,7 @@ static void jit_opcode( jit_ctx *ctx, enum OPCODE op, int p ) {
 		XJump(JNeq,jnot_array);
 
 		XMov_rp(TMP2,TMP,FIELD(0));
-		XCmp_rc(TMP2,(p << TAG_BITS) | VAL_ARRAY); // fake header
+		XCmp_rc(TMP2,(p << NEKO_TAG_BITS) | VAL_ARRAY); // fake header
 		XJump(JLte,jend1);
 		XMov_pr(TMP,FIELD(p + 1),ACC);
 		XJump_near(jend2);
@@ -2528,7 +2522,7 @@ static void jit_opcode( jit_ctx *ctx, enum OPCODE op, int p ) {
 }
 
 
-#if defined(STACK_ALIGN_DEBUG) || defined(JIT_DEBUG)
+#if defined(STACK_ALIGN_DEBUG) || defined(NEKO_JIT_DEBUG)
 #	define MAX_OP_SIZE		1000
 #	define MAX_BUF_SIZE		1000
 #else
@@ -2682,7 +2676,7 @@ void neko_module_jit( neko_module *m ) {
 		}
 
 		// --------- debug ---------
-#		ifdef JIT_DEBUG
+#		ifdef NEKO_JIT_DEBUG
 		if( ctx->debug_wait )
 			ctx->debug_wait--;
 		else {
@@ -2744,7 +2738,7 @@ void neko_module_jit( neko_module *m ) {
 		m->jit_gc = alloc_abstract(NULL,rbuf);
 		val_gc(m->jit_gc,free_jit_abstract);
 #		endif
-#		ifdef JIT_DEBUG
+#		ifdef NEKO_JIT_DEBUG
 		printf("Jit size = %d ( x%.1f )\n",csize,csize * 1.0 / ((m->codesize + 1) * 4));
 #		endif
 		jit_finalize_context(ctx);
@@ -2764,7 +2758,7 @@ void neko_module_jit( neko_module *m ) {
 	tmp_free(ctx->pos);
 }
 
-#else // JIT_ENABLE
+#else // NEKO_JIT_ENABLE
 
 char *jit_boot_seq = NULL;
 char *jit_handle_trap = (char*)&jit_boot_seq;
