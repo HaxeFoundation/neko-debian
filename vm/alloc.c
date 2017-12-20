@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2016 Haxe Foundation
+ * Copyright (C)2005-2017 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -117,7 +117,6 @@ static void null_warn_proc( char *msg, int arg ) {
 }
 
 void neko_gc_init() {
-	GC_set_warn_proc((GC_warn_proc)(void*)null_warn_proc);
 #	ifndef NEKO_WINDOWS
 	// we can't set this on windows with old GC since
 	// it's already initialized through its own DllMain
@@ -131,6 +130,7 @@ void neko_gc_init() {
 #endif
 	GC_java_finalization = 1;
 	GC_init();
+	GC_set_warn_proc((GC_warn_proc)(void*)null_warn_proc);
 	GC_no_dls = 1;
 #ifdef LOW_MEM
 	GC_dont_expand = 1;
@@ -178,7 +178,7 @@ EXTERN value alloc_empty_string( unsigned int size ) {
 	s = (vstring*)gc_alloc_private_big(size+sizeof(vstring));
 	if( s == NULL )
 		failure("out of memory");
-	s->t = VAL_STRING | (size << TAG_BITS);
+	s->t = VAL_STRING | (size << NEKO_TAG_BITS);
 	(&s->c)[size] = 0;
 	return (value)s;
 }
@@ -211,7 +211,7 @@ EXTERN value alloc_array( unsigned int n ) {
 		failure("max_array_size reached");
 	v = (value)gc_alloc_big(sizeof(varray)+(n - 1)*sizeof(value));
 	if( v == NULL ) failure("out of memory");
-	v->t = VAL_ARRAY | (n << TAG_BITS);
+	v->t = VAL_ARRAY | (n << NEKO_TAG_BITS);
 	return v;
 }
 

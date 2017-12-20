@@ -34,11 +34,11 @@ Users of other Linux/FreeBSD distributions should build Neko from source. See be
 
 Neko can be built using CMake (version 3.x is recommended) and one of the C compilers listed as follows:
 
- * Windows: Visual Studio 2010 / 2013 (Visual Studio 2015 is not yet supported)
+ * Windows: Visual Studio 2010 / 2013 / 2015 / 2017 
  * Mac: XCode (with its "Command line tools")
  * Linux: gcc (can be obtained by installing the "build-essential" Debian/Ubuntu package)
 
-Neko needs to link with various third-party libraries, which are summerized as follows:
+Neko needs to link with various third-party libraries, which are summarized as follows:
 
 | library / tool                          | OS          | Debian/Ubuntu package                                     |
 |-----------------------------------------|-------------|-----------------------------------------------------------|
@@ -52,7 +52,7 @@ Neko needs to link with various third-party libraries, which are summerized as f
 | mbed TLS                                | all         | libmbedtls-dev                                            |
 | GTK+2                                   | Linux       | libgtk2.0-dev                                             |
 
-On Windows, CMake will automatically download and build the libraries in the build folder during the build process. However, you need to install [Perl](http://www.activestate.com/activeperl) manually because OpenSSL needs it for configuration. On Mac/Linux, you should install the libraries manaully to your system before building Neko, or use the `STATIC_DEPS` CMake option, which will be explained in [CMake options](#cmake-options).
+On Windows, CMake will automatically download and build the libraries in the build folder during the build process. However, you need to install [Perl](http://www.activestate.com/activeperl) manually because OpenSSL needs it for configuration. On Mac/Linux, you should install the libraries manually to your system before building Neko, or use the `STATIC_DEPS` CMake option, which will be explained in [CMake options](#cmake-options).
 
 ### Building on Mac/Linux
 
@@ -82,7 +82,9 @@ You may use the CMake GUI and Visual Studio to build it instead.
 mkdir build
 cd build
 
-# run cmake
+# run cmake specifying the visual studio version you need 
+# Visual Studio 12 2013, Visual Studio 14 2015, Visual Studio 15 2017
+# you can additionally specify platform via -A switch (x86, x64)
 cmake -G "Visual Studio 12 2013" ..
 
 # let's build, the outputs can be located in the "bin" directory
@@ -101,27 +103,44 @@ A number of options can be used to customize the build. They can be specified in
 cmake "-Doption=value" ..
 ```
 
-#### `WITH_NDLLS`
+#### NDLLs
 
-Available on all platforms. Default value: `std.ndll;zlib.ndll;mysql.ndll;mysql5.ndll;regexp.ndll;sqlite.ndll;ui.ndll;mod_neko2.ndll;mod_tora2.ndll;ssl.ndll`
+Settings that allow to exclude libraries and their dependencies from the build; available on all platforms. By default all are `ON`:
 
-It defines the ndll files to be built. You may remove ndlls from this list, such that you can avoid installing/building some dependencies.
+- `WITH_REGEXP` - Build Perl-compatible regex support
+- `WITH_UI` - Build GTK-2 UI support
+- `WITH_SSL` - Build SSL support
+- `WITH_MYSQL` - Build MySQL support
+- `WITH_SQLITE` - Build Sqlite support
+- `WITH_APACHE` - Build Apache modules
 
 #### `STATIC_DEPS`
 
-Available on Mac/Linux. Default value: `none`
+Default value: `all` for Windows, `none` otherwise
 
 It defines the dependencies that should be linked statically. Can be `all`, `none`, or a list of library names (e.g. `BoehmGC;Zlib;OpenSSL;MariaDBConnector;PCRE;Sqlite3;APR;APRutil;Apache;MbedTLS`).
 
 CMake will automatically download and build the specified dependencies into the build folder. If a library is not present in this list, it should be installed manually, and it will be linked dynamically.
 
-All third-party libraries, except GTK+2 (Linux), can be linked statically. We do not support statically linking GTK+2 due to the diffculty of building it and its own dependencies.
+All third-party libraries, except GTK+2 (Linux), can be linked statically. We do not support statically linking GTK+2 due to the difficulty of building it and its own dependencies.
 
 #### `RELOCATABLE`
 
 Available on Mac/Linux. Default value: `ON`
 
 Set RPATH to `$ORIGIN` (Linux) / `@executable_path` (Mac). It allows the resulting Neko VM executable to locate libraries (e.g. "libneko" and ndll files) in its local directory, such that the libraries need not be installed to "/usr/lib" or "/usr/local/lib".
+
+#### `NEKO_JIT_DISABLE`
+
+Default `OFF`.
+
+Disable Neko JIT. By default, Neko JIT will be enabled for platforms it supports. Setting this to `ON` disable JIT for all platforms.
+
+#### `NEKO_JIT_DEBUG`
+
+Default `OFF`.
+
+Debug Neko JIT.
 
 #### `RUN_LDCONFIG`
 

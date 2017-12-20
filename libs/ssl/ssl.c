@@ -22,6 +22,7 @@ typedef int SOCKET;
 #define SOCKET_ERROR (-1)
 #define NRETRYS	20
 
+#include "mbedtls/platform.h"
 #include "mbedtls/error.h"
 #include "mbedtls/entropy.h"
 #include "mbedtls/ctr_drbg.h"
@@ -241,6 +242,8 @@ static value ssl_recv( value ssl, value data, value pos, value len ) {
 		HANDLE_EINTR(recv_again);
 		return block_error();
 	}
+	if( dlen == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY )
+		return alloc_int(0);
 	if( dlen < 0 )
 		neko_error();
 	return alloc_int( dlen );
@@ -261,6 +264,8 @@ static  value ssl_read( value ssl ) {
 			HANDLE_EINTR(read_again);
 			return block_error();
 		}
+		if( len == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY )
+			break;
 		if( len == 0 )
 			break;
 		buffer_append_sub(b,(const char *)buf,len);
@@ -348,7 +353,7 @@ static value cert_load_file(value file){
 	val_check(file,string);
 	x = (mbedtls_x509_crt *)alloc(sizeof(mbedtls_x509_crt));
 	mbedtls_x509_crt_init( x );
-	if( (r = mbedtls_x509_crt_parse_file(x, val_string(file))) != 0 ){
+	if( (r = mbedtls_x509_crt_parse_file(x, val_string(file))) < 0 ){
 		return ssl_error(r);
 	}
 	v = alloc_abstract(k_cert, x);
@@ -363,7 +368,7 @@ static value cert_load_path(value path){
 	val_check(path,string);
 	x = (mbedtls_x509_crt *)alloc(sizeof(mbedtls_x509_crt));
 	mbedtls_x509_crt_init( x );
-	if( (r = mbedtls_x509_crt_parse_path(x, val_string(path))) != 0 ){
+	if( (r = mbedtls_x509_crt_parse_path(x, val_string(path))) < 0 ){
 		return ssl_error(r);
 	}
 	v = alloc_abstract(k_cert, x);
