@@ -1,0 +1,22 @@
+#!/bin/sh
+
+set -e
+
+testdir=$(mktemp -d)
+trap "rm -rf ${testdir}" 0 INT QUIT ABRT PIPE TERM
+cd ${testdir}
+
+cat <<'EOF' > test.neko
+$print("The virtual machine is working !\n");
+test = $loader.loadprim("std@test",0);
+test();
+$print("Test successful\n");
+EOF
+
+nekoc test.neko
+
+echo "compile: OK"
+
+neko test.n | grep -q "Test successful"
+
+echo "run: OK"
