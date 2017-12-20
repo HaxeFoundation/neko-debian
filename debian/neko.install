@@ -1,2 +1,2 @@
-usr/lib/neko/* usr/lib/neko
-usr/bin/* usr/bin
+usr/lib/*/neko/*
+usr/bin/*
