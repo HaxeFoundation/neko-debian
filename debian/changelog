@@ -4,8 +4,9 @@ neko (2.2.0-1) unstable; urgency=low
   * Removed patches applied to upstream.
   * Convert to multiarch.
   * Updated d/watch to match new upstream download links.
-  * Bump Standards-Version to 4.1.1 (no changes).
-  * Disable parallel build since it is only supported by upstream when using Ninja.
+  * Bump Standards-Version to 4.1.2 (no changes).
+  * Disable parallel build since it is only supported by upstream
+    when using Ninja.
 
  -- Andy Li <andy@onthewings.net>  Wed, 20 Dec 2017 10:43:17 +0800
 
