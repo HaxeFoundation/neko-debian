@@ -1,2 +1,3 @@
 version=3
-http://nekovm.org/download .*/neko-(\d\.\d\.\d)-src\.tar\.gz
+opts="uversionmangle=s/-/./g"\
+ https://nekovm.org/download/ https://github.com/HaxeFoundation/neko/archive/v(\d\-\d\-\d)\.tar\.gz

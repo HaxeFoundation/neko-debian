@@ -1,3 +1,9 @@
+neko (2.2.0-1) unstable; urgency=low
+
+  * Updated d/watch to match new upstream download links.
+
+ -- Andy Li <andy@onthewings.net>  Wed, 20 Dec 2017 10:43:17 +0800
+
 neko (2.1.0-4) unstable; urgency=medium
 
   * Updated dependencies of mariadb and mysql (Closes: #843841).
