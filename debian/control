@@ -17,6 +17,7 @@ Build-Depends:
 	libpcre3-dev,
 	libapr1-dev,
 	libgtk2.0-dev,
+	libmbedtls-dev,
 	bash-completion
 Vcs-Git: https://github.com/HaxeFoundation/neko-debian.git
 Vcs-Browser: https://github.com/HaxeFoundation/neko-debian
