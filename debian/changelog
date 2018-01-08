@@ -2,6 +2,7 @@ neko (2.2.0-2) unstable; urgency=medium
 
   * Turned libapache2-mod-neko into Architecture: any.
     (Closes: #886427)
+  * Bump Standards-Version to 4.1.3 (no changes).
 
  -- Andy Li <andy@onthewings.net>  Mon, 08 Jan 2018 09:45:01 +0800
 
