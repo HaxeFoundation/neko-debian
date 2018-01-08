@@ -1,3 +1,10 @@
+neko (2.2.0-2) unstable; urgency=medium
+
+  * Turned libapache2-mod-neko into Architecture: any.
+    (Closes: #886427)
+
+ -- Andy Li <andy@onthewings.net>  Mon, 08 Jan 2018 09:45:01 +0800
+
 neko (2.2.0-1) unstable; urgency=low
 
   * New upstream version.

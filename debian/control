@@ -72,7 +72,7 @@ Description: Lightweight virtual machine - compiler and tools
  Neko was written by Nicolas Cannasse.
 
 Package: libapache2-mod-neko
-Architecture: all
+Architecture: any
 Section: httpd
 Depends: neko (>= ${source:Version}), ${misc:Depends}
 Description: Apache module for running server-side Neko programs
