@@ -1,6 +1,7 @@
 neko (2.2.0-2~ubuntu14.04.1~ppa1) trusty; urgency=medium
 
   * Use libmysqlclient-dev.
+  * Update mbedtls to 2.6.0.
 
  -- Andy Li <andy@onthewings.net>  Wed, 28 Mar 2018 17:36:15 +0800
 
