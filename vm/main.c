@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2016 Haxe Foundation
+ * Copyright (C)2005-2017 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -28,6 +28,7 @@
 #	include <windows.h>
 #else
 #	include <unistd.h>
+#	include <limits.h>
 #endif
 #ifdef NEKO_MAC
 #	include <sys/param.h>
@@ -91,10 +92,10 @@ static char *executable_path() {
         sysctl(mib, 4, path, &cb, NULL, 0);
         if (!cb) return NULL;
         return path;
-#else
-	static char path[200];
+#elif defined(NEKO_LINUX)
+	static char path[PATH_MAX];
 	int length = readlink("/proc/self/exe", path, sizeof(path));
-	if( length < 0 || length >= 200 ) {
+	if( length < 0 || length >= PATH_MAX ) {
 		char *p = getenv("   "); // for upx
 		if( p == NULL )
 			p = getenv("_");
@@ -102,6 +103,8 @@ static char *executable_path() {
 	}
 	path[length] = '\0';
 	return path;
+#else
+	return getenv("_");
 #endif
 }
 
@@ -113,9 +116,9 @@ int neko_has_embedded_module( neko_vm *vm ) {
 		return 0;
 
 #ifdef SEPARATE_SECTION_FOR_BYTECODE
-	/* Look for a ,nekobytecode section in the executable... */
-	if ( val_true != elf_find_embedded_bytecode(exe,&beg,&end) ) {
-		/* Couldn't find a .nekobytecode section,
+	/* Look for a .nekobytecode section in the executable..., there is always a small section */
+	if ( val_true != elf_find_embedded_bytecode(exe,&beg,&end) || end-beg <= 8) {
+		/* Couldn't find a big enough .nekobytecode section,
 		   fallback to looking at the end of the executable... */
 		beg = -1; end = 0;
 	}
@@ -256,6 +259,14 @@ int main( int argc, char *argv[] ) {
 #	ifdef NEKO_STANDALONE
 	neko_standalone_init();
 #	endif
+#	ifdef NEKO_POSIX
+	struct sigaction act;
+	act.sa_sigaction = NULL;
+	act.sa_handler = handle_signal;
+	act.sa_flags = 0;
+	sigemptyset(&act.sa_mask);
+	sigaction(SIGPIPE,&act,NULL);
+#	endif
 	if( !neko_has_embedded_module(vm) ) {
 		int jit = 1;
 		int stats = 0;
@@ -283,12 +294,6 @@ int main( int argc, char *argv[] ) {
 			break;
 		}
 #		ifdef NEKO_POSIX
-		struct sigaction act;
-		act.sa_sigaction = NULL;
-		act.sa_handler = handle_signal;
-		act.sa_flags = 0;
-		sigemptyset(&act.sa_mask);
-		sigaction(SIGPIPE,&act,NULL);
 		if( jit )
 			sigaction(SIGSEGV,&act,NULL);
 #		endif
@@ -297,7 +302,7 @@ int main( int argc, char *argv[] ) {
 #			ifdef NEKO_STANDALONE
 			report(vm,alloc_string("No embedded module in this executable"),0);
 #			else
-			printf("NekoVM %d.%d.%d (c)2005-2016 Haxe Foundation\n  Usage : neko <file>\n",NEKO_VERSION_MAJOR,NEKO_VERSION_MINOR,NEKO_VERSION_PATCH);
+			printf("NekoVM %d.%d.%d (c)2005-2017 Haxe Foundation\n  Usage : neko <file>\n",NEKO_VERSION_MAJOR,NEKO_VERSION_MINOR,NEKO_VERSION_PATCH);
 #			endif
 			mload = NULL;
 			r = 1;

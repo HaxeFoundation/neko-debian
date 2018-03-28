@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2016 Haxe Foundation
+ * Copyright (C)2005-2017 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -26,7 +26,7 @@
 #	define OS_WINDOWS
 #endif
 
-#if defined(__APPLE__) || defined(__MACH__) || defined(macintosh)
+#if defined(__APPLE__) || defined(macintosh)
 #	define OS_MAC
 #endif
 
@@ -38,29 +38,28 @@
 #	define OS_BSD
 #endif
 
-#if defined(NEKO_LINUX) || defined(NEKO_MAC) || defined(NEKO_BSD) || defined(NEKO_GNUKBSD)
+#if defined(__GNU__)
+#	define OS_HURD
+#endif
+
+#if defined(__CYGWIN__)
+#	define OS_CYGWIN
+#endif
+
+#if defined(OS_LINUX) || defined(OS_MAC) || defined(OS_BSD) || defined(OS_GNUKBSD) || defined (OS_HURD) || defined (OS_CYGWIN)
 #	define OS_POSIX
 #endif
 
-#if defined(OS_WINDOWS)
-#	define LITTLE_ENDIAN 1
-#	define BIG_ENDIAN 2
-#	define BYTE_ORDER LITTLE_ENDIAN
-#elif defined(OS_MAC) || defined(OS_BSD)
+#if defined(OS_MAC) || defined(OS_BSD)
 #	include <machine/endian.h>
-#else
+#elif !defined(OS_WINDOWS)
 #	include <endian.h>
 #endif
 
-#ifndef BYTE_ORDER
-#	warning BYTE_ORDER unknown, assuming BIG_ENDIAN
-#	define BYTE_ORDER BIG_ENDIAN
-#endif
+#cmakedefine NEKO_BIG_ENDIAN
 
-#if BYTE_ORDER == BIG_ENDIAN
-#	define IS_BIG_ENDIAN
-#else
-#	define IS_LITTLE_ENDIAN
+#ifndef NEKO_BIG_ENDIAN
+#	define NEKO_LITTLE_ENDIAN
 #endif
 
 #ifndef true

@@ -13,15 +13,28 @@ ifeq (kfreebsd,$(DEB_HOST_ARCH_OS))
 export DEB_CFLAGS_MAINT_APPEND = -fno-strict-aliasing
 endif
 
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
+
 override_dh_auto_configure:
-	dh_auto_configure -- -DSTATIC_DEPS=MbedTLS -DCMAKE_SKIP_RPATH=ON -DRUN_LDCONFIG=OFF
+	dh_auto_configure -- \
+		-DSTATIC_DEPS=MbedTLS \
+		-DCMAKE_INSTALL_INCLUDEDIR=include/$(DEB_HOST_MULTIARCH) \
+		-DCMAKE_INSTALL_LIBDIR=lib/$(DEB_HOST_MULTIARCH) \
+		-DCMAKE_SKIP_RPATH=ON \
+		-DRUN_LDCONFIG=OFF
 	mkdir -p build/libs/src
 	cp debian/mbedtls-2.2.1-apache.tgz build/libs/src/mbedtls-2.2.1-apache.tgz
+	echo "LoadModule neko_module /usr/lib/$(DEB_HOST_MULTIARCH)/neko/mod_neko2.ndll" > debian/neko.load
 
 # dh_shlibdeps does not see the ndll files as libraries, so we call dpkg-shlibdeps manually
 override_dh_shlibdeps:
 	dh_shlibdeps
-	dpkg-shlibdeps -Tdebian/neko.substvars debian/neko/usr/bin/* debian/neko/usr/lib/neko/*.ndll
+	dpkg-shlibdeps -Tdebian/neko.substvars debian/neko/usr/bin/* debian/neko/usr/lib/*/neko/*.ndll
+
+override_dh_missing:
+	dh_missing --fail-missing
 
 get-orig-source:
 	uscan --verbose --rename --force-download

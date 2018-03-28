@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2016 Haxe Foundation
+ * Copyright (C)2005-2017 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -371,7 +371,7 @@ static value host_resolve( value host ) {
 	ip = inet_addr(val_string(host));
 	if( ip == INADDR_NONE ) {
 		struct hostent *h;
-#	if defined(NEKO_WINDOWS) || defined(NEKO_MAC)
+#	if defined(NEKO_WINDOWS) || defined(NEKO_MAC) || defined(NEKO_CYGWIN)
 		h = gethostbyname(val_string(host));
 #	else
 		struct hostent hbase;
@@ -406,7 +406,7 @@ static value host_reverse( value host ) {
 	unsigned int ip;
 	val_check(host,int32);
 	ip = val_int32(host);
-#	if defined(NEKO_WINDOWS) || defined(NEKO_MAC)
+#	if defined(NEKO_WINDOWS) || defined(NEKO_MAC) || defined(NEKO_CYGWIN)
 	h = gethostbyaddr((char *)&ip,4,AF_INET);
 #	else
 	struct hostent htmp;

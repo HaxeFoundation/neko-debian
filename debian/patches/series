@@ -1,7 +1,0 @@
-hurd.diff
-no-openssl.diff
-mincoming-stack-boundary.diff
-boot-c-1.diff
-boot-c-2.diff
-tests-1.diff
-tests-2.diff

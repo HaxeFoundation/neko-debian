@@ -1,6 +1,6 @@
 /*
  * MYSQL 5.0 Protocol Implementation
- * Copyright (C)2005-2016 Haxe Foundation
+ * Copyright (C)2005-2017 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -218,6 +218,10 @@ void myp_write_int( MYSQL_PACKET *p, int i ) {
 
 void myp_write_string( MYSQL_PACKET *p, const char *str ) {
 	myp_write(p,str,strlen(str) + 1);
+}
+
+void myp_write_string_eof( MYSQL_PACKET *p, const char *str ) {
+	myp_write(p,str,strlen(str));
 }
 
 void myp_write_bin( MYSQL_PACKET *p, int size ) {

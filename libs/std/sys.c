@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2016 Haxe Foundation
+ * Copyright (C)2005-2017 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -41,7 +41,11 @@
 #	include <sys/time.h>
 #	include <sys/times.h>
 #	include <sys/wait.h>
+#ifdef NEKO_XLOCALE_H
 #	include <xlocale.h>
+#else
+#	include <locale.h>
+#endif
 #endif
 
 #ifdef NEKO_MAC
@@ -190,7 +194,7 @@ static value set_cwd( value d ) {
 	</doc>
 **/
 static value sys_string() {
-#if defined(NEKO_WINDOWS)
+#if defined(NEKO_WINDOWS) || defined(NEKO_CYGWIN)
 	return alloc_string("Windows");
 #elif defined(NEKO_GNUKBSD)
 	return alloc_string("GNU/kFreeBSD");
@@ -198,6 +202,8 @@ static value sys_string() {
 	return alloc_string("Linux");
 #elif defined(NEKO_BSD)
 	return alloc_string("BSD");
+#elif defined(NEKO_HURD)
+	return alloc_string("GNU/Hurd");
 #elif defined(NEKO_MAC)
 	return alloc_string("Mac");
 #else
@@ -537,6 +543,14 @@ static value file_full_path( value path ) {
 	if( GetFullPathName(val_string(path),MAX_PATH+1,buf,NULL) == 0 )
 		neko_error();
 	return alloc_string(buf);
+#elif defined(__GLIBC__)
+	val_check(path,string);
+	char *buf = realpath(val_string(path), NULL);
+	if( buf == NULL )
+		neko_error();
+	value ret = alloc_string(buf);
+	free(buf);
+	return ret;
 #else
 	char buf[PATH_MAX];
 	val_check(path,string);
@@ -562,18 +576,24 @@ static value sys_exe_path() {
 	if( _NSGetExecutablePath(path, &path_len) )
 		neko_error();
 	return alloc_string(path);
+#elif defined(NEKO_LINUX)
+	static char path[PATH_MAX];
+	int length = readlink("/proc/self/exe", path, sizeof(path));
+	if( length < 0 || length >= PATH_MAX ) {
+		char *p = getenv("   "); // for upx
+		if( p == NULL )
+			p = getenv("_");
+		if( p == NULL )
+			neko_error();
+		return alloc_string(p);
+	}
+	path[length] = '\0';
+	return alloc_string(path);
 #else
 	const char *p = getenv("_");
 	if( p != NULL )
 		return alloc_string(p);
-	{
-		char path[PATH_MAX];
-		int length = readlink("/proc/self/exe", path, sizeof(path));
-		if( length < 0 )
-			neko_error();
-	    path[length] = '\0';
-		return alloc_string(path);
-	}
+	neko_error();
 #endif
 }
 
