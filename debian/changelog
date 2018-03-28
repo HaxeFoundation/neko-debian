@@ -1,8 +1,8 @@
 neko (2.2.0-2~ubuntu14.04.1~ppa1) trusty; urgency=medium
 
-  * Use libmariadb-client-lgpl-dev-compat.
+  * Use libmysqlclient-dev.
 
- -- Andy Li <andy@onthewings.net>  Wed, 28 Mar 2018 17:10:38 +0800
+ -- Andy Li <andy@onthewings.net>  Wed, 28 Mar 2018 17:36:15 +0800
 
 neko (2.2.0-2) unstable; urgency=medium
 
