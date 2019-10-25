@@ -20,7 +20,7 @@ Build-Depends:
 	bash-completion
 Vcs-Git: https://github.com/HaxeFoundation/neko-debian.git
 Vcs-Browser: https://github.com/HaxeFoundation/neko-debian
-Homepage: http://nekovm.org
+Homepage: https://nekovm.org
 
 Package: libneko2
 Architecture: any

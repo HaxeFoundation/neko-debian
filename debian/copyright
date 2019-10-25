@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: The Haxe Foundation
-Upstream-Contact: http://haxe.org/foundation/contact.html
+Upstream-Contact: https://haxe.org/foundation/contact.html
 Source: https://github.com/HaxeFoundation/neko
 
 Files: *

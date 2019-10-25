@@ -1,3 +1,10 @@
+neko (2.3.0-1) unstable; urgency=medium
+
+  * New upstream version.
+  * Use https for information links.
+
+ -- Andy Li <andy@onthewings.net>  Fri, 25 Oct 2019 21:47:31 +0800
+
 neko (2.2.0-2) unstable; urgency=medium
 
   * Turned libapache2-mod-neko into Architecture: any.
