@@ -1,8 +1,17 @@
-neko (2.2.0-2~ubuntu16.04.1~ppa1) xenial; urgency=medium
+neko (2.3.0-1~ubuntu16.04.1~ppa1) xenial; urgency=medium
 
   * Use libmariadb-client-lgpl-dev-compat.
 
- -- Andy Li <andy@onthewings.net>  Wed, 28 Mar 2018 17:10:38 +0800
+ -- Andy Li <andy@onthewings.net>  Sun, 10 Nov 2019 18:33:58 +0800
+
+neko (2.3.0-1) unstable; urgency=medium
+
+  * New upstream version.
+  * Use https for information links.
+  * Bump Standards-Version to 4.4.1.
+    + Remove get-orig-source in d/rules.
+
+ -- Andy Li <andy@onthewings.net>  Fri, 25 Oct 2019 21:47:31 +0800
 
 neko (2.2.0-2) unstable; urgency=medium
 
