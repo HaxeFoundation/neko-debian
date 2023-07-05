@@ -1,0 +1,897 @@
+From fef947af841ebc55eb2f9589eb69f06a2d15b7f0 Mon Sep 17 00:00:00 2001
+From: tobil4sk <tobil4sk@outlook.com>
+Date: Wed, 16 Feb 2022 15:42:21 +0000
+Subject: [PATCH 1/2] Migrate to pcre2 (#249)
+
+* [regex] Update pcre to pcre2
+
+* [regex] Throw if accessing match after match error
+
+* [regex] Prevent null character breaking patterns
+
+e.g. `new EReg("abc\x00def", "")` would erroneously match "abc"
+
+https://github.com/HaxeFoundation/haxe/issues/10592
+
+* [regex] Add TODO regarding pcre2_substitute
+
+* [cmake] Fix static Apache build
+
+We can no longer link pcre as we use pcre2
+
+* [cmake] Fix windows pcre static build
+
+* [cmake] Download old PCRE for Apache
+
+* [cmake] Remove unused flag for pcre windows build
+
+* [cmake] Reenable PCRE_STATIC cmake flag for Win
+
+* [cmake] Use https for pcre download for Apache
+
+Co-authored-by: Simon Krajewski <simon@haxe.org>
+# Conflicts:
+#	Earthfile
+#	README.md
+#	extra/azure-pipelines/Brewfile-STATIC_DEPS_NONE
+#	libs/CMakeLists.txt
+---
+ CMakeLists.txt                                |   2 +-
+ Earthfile                                     | 233 ++++++++++++++++++
+ README.md                                     |   4 +-
+ cmake/FindPCRE.cmake                          |  55 -----
+ cmake/FindPCRE2.cmake                         |  19 ++
+ .../azure-pipelines/Brewfile-STATIC_DEPS_NONE |   4 +-
+ libs/CMakeLists.txt                           |  85 ++++++-
+ libs/regexp/CMakeLists.txt                    |  72 +++---
+ libs/regexp/regexp.c                          | 121 +++++----
+ 9 files changed, 445 insertions(+), 150 deletions(-)
+ create mode 100644 Earthfile
+ delete mode 100644 cmake/FindPCRE.cmake
+ create mode 100644 cmake/FindPCRE2.cmake
+
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -101,7 +101,7 @@
+ 	Zlib
+ 	OpenSSL
+ 	MariaDBConnector
+-	PCRE
++	pcre2
+ 	Sqlite3
+ 	APR
+ 	APRutil
+--- /dev/null
++++ b/Earthfile
+@@ -0,0 +1,233 @@
++VERSION 0.6
++FROM ubuntu:bionic
++
++ARG DEVCONTAINER_IMAGE_NAME_DEFAULT=haxe/neko_devcontainer
++
++ARG USERNAME=vscode
++ARG USER_UID=1000
++ARG USER_GID=$USER_UID
++
++ARG LINK_TYPE_DEFAULT=static # static or dynamic
++ARG LINK_DYNAMIC_PACKAGES="libgc-dev libpcre2-dev zlib1g-dev apache2-dev libmysqlclient-dev libsqlite3-dev libmbedtls-dev"
++
++vscode-dev-containers-scripts:
++    FROM curlimages/curl:7.80.0
++    WORKDIR /tmp
++    RUN curl -fsSLO https://raw.githubusercontent.com/microsoft/vscode-dev-containers/main/script-library/common-debian.sh
++    RUN curl -fsSLO https://raw.githubusercontent.com/microsoft/vscode-dev-containers/main/script-library/docker-debian.sh
++    SAVE ARTIFACT --keep-ts *.sh AS LOCAL .devcontainer/library-scripts/
++
++devcontainer-base:
++    FROM mcr.microsoft.com/vscode/devcontainers/base:0-bionic
++    ARG --required TARGETARCH
++
++    # Avoid warnings by switching to noninteractive
++    ENV DEBIAN_FRONTEND=noninteractive
++
++    ARG INSTALL_ZSH="false"
++    ARG UPGRADE_PACKAGES="true"
++    ARG ENABLE_NONROOT_DOCKER="true"
++    ARG USE_MOBY="false" # moby-buildx is missing in bionic
++    COPY .devcontainer/library-scripts/*.sh /tmp/library-scripts/
++    RUN apt-get update \
++        && /bin/bash /tmp/library-scripts/common-debian.sh "${INSTALL_ZSH}" "${USERNAME}" "${USER_UID}" "${USER_GID}" "${UPGRADE_PACKAGES}" "true" "true" \
++        # Use Docker script from script library to set things up
++        && /bin/bash /tmp/library-scripts/docker-debian.sh "${ENABLE_NONROOT_DOCKER}" "/var/run/docker-host.sock" "/var/run/docker.sock" "${USERNAME}" "${USE_MOBY}" \
++        # Clean up
++        && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/* /tmp/library-scripts/
++
++    # Configure apt and install packages
++    RUN apt-get update \
++        && apt-get install -y --no-install-recommends apt-utils dialog 2>&1 \
++        && apt-get install -y \
++            iproute2 \
++            procps \
++            sudo \
++            bash-completion \
++            build-essential \
++            curl \
++            wget \
++            software-properties-common \
++            direnv \
++            tzdata \
++            python3-pip \
++            # Neko deps
++            cmake \
++            ninja-build \
++            pkg-config \
++            libgtk2.0-dev \
++            $LINK_DYNAMIC_PACKAGES \
++        #
++        # Clean up
++        && apt-get autoremove -y \
++        && apt-get clean -y \
++        && rm -rf /var/lib/apt/lists/*
++
++    # Switch back to dialog for any ad-hoc use of apt-get
++    ENV DEBIAN_FRONTEND=
++
++    # Setting the ENTRYPOINT to docker-init.sh will configure non-root access
++    # to the Docker socket. The script will also execute CMD as needed.
++    ENTRYPOINT [ "/usr/local/share/docker-init.sh" ]
++    CMD [ "sleep", "infinity" ]
++
++    # VS Code workspace
++    RUN mkdir -m 777 "/workspace"
++    WORKDIR /workspace
++
++# Usage:
++# COPY +earthly/earthly /usr/local/bin/
++# RUN earthly bootstrap --no-buildkit --with-autocomplete
++earthly:
++    FROM +devcontainer-base
++    ARG --required TARGETARCH
++    RUN curl -fsSL https://github.com/earthly/earthly/releases/download/v0.6.2/earthly-linux-${TARGETARCH} -o /usr/local/bin/earthly \
++        && chmod +x /usr/local/bin/earthly
++    SAVE ARTIFACT /usr/local/bin/earthly
++
++devcontainer:
++    FROM +devcontainer-base
++
++    # Install earthly
++    COPY +earthly/earthly /usr/local/bin/
++    RUN earthly bootstrap --no-buildkit --with-autocomplete
++
++    USER $USERNAME
++
++    # Config direnv
++    COPY --chown=$USER_UID:$USER_GID .devcontainer/direnv.toml /home/$USERNAME/.config/direnv/config.toml
++
++    # Config bash
++    RUN echo 'eval "$(direnv hook bash)"' >> ~/.bashrc
++
++    USER root
++
++    ARG DEVCONTAINER_IMAGE_NAME="$DEVCONTAINER_IMAGE_NAME_DEFAULT"
++    ARG DEVCONTAINER_IMAGE_TAG=latest
++    SAVE IMAGE --push "$DEVCONTAINER_IMAGE_NAME:$DEVCONTAINER_IMAGE_TAG" "$DEVCONTAINER_IMAGE_NAME:latest"
++
++devcontainer-rebuild:
++    RUN --no-cache date +%Y%m%d%H%M%S | tee buildtime
++    ARG DEVCONTAINER_IMAGE_NAME="$DEVCONTAINER_IMAGE_NAME_DEFAULT"
++    BUILD \
++        --platform=linux/amd64 \
++        --platform=linux/arm64 \
++        +devcontainer \
++        --DEVCONTAINER_IMAGE_NAME="$DEVCONTAINER_IMAGE_NAME" \
++        --DEVCONTAINER_IMAGE_TAG="$(cat buildtime)"
++    BUILD +devcontainer-update-refs \
++        --DEVCONTAINER_IMAGE_NAME="$DEVCONTAINER_IMAGE_NAME" \
++        --DEVCONTAINER_IMAGE_TAG="$(cat buildtime)"
++
++devcontainer-update-refs:
++    ARG --required DEVCONTAINER_IMAGE_NAME
++    ARG --required DEVCONTAINER_IMAGE_TAG
++    BUILD +devcontainer-update-ref \
++        --DEVCONTAINER_IMAGE_NAME="$DEVCONTAINER_IMAGE_NAME" \
++        --DEVCONTAINER_IMAGE_TAG="$DEVCONTAINER_IMAGE_TAG" \
++        --FILE='.devcontainer/docker-compose.yml'
++
++devcontainer-update-ref:
++    ARG --required DEVCONTAINER_IMAGE_NAME
++    ARG --required DEVCONTAINER_IMAGE_TAG
++    ARG --required FILE
++    COPY "$FILE" file.src
++    RUN sed -e "s#$DEVCONTAINER_IMAGE_NAME:[a-z0-9]*#$DEVCONTAINER_IMAGE_NAME:$DEVCONTAINER_IMAGE_TAG#g" file.src > file.out
++    SAVE ARTIFACT --keep-ts file.out $FILE AS LOCAL $FILE
++
++build-env:
++    # We specifically use an old distro to build against an old glibc.
++    # https://repology.org/project/glibc/versions
++    FROM ubuntu:xenial
++    RUN apt-get update \
++        && apt-get install -qqy --no-install-recommends \
++            software-properties-common \
++            curl \
++            build-essential \
++            git \
++            ninja-build \
++            pkg-config \
++            libgtk2.0-dev \
++        #
++        # Clean up
++        && apt-get autoremove -y \
++        && apt-get clean -y \
++        && rm -rf /var/lib/apt/lists/*
++    # install a recent CMake
++    ARG --required TARGETARCH
++    ARG CMAKE_VERSION=3.22.1
++    RUN case "$TARGETARCH" in \
++            amd64) curl -fsSL "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-x86_64.sh" -o cmake-install.sh;; \
++            arm64) curl -fsSL "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-aarch64.sh" -o cmake-install.sh;; \
++            *) exit 1;; \
++        esac \
++        && sh cmake-install.sh --skip-license --prefix /usr/local \
++        && rm cmake-install.sh
++    ARG LINK_TYPE="$LINK_TYPE_DEFAULT" # static or dynamic
++    RUN if [ "$LINK_TYPE" = "dynamic" ]; then \
++        apt-get update && apt-get install -qqy --no-install-recommends $LINK_DYNAMIC_PACKAGES \
++        #
++        # Clean up
++        && apt-get autoremove -y \
++        && apt-get clean -y \
++        && rm -rf /var/lib/apt/lists/* \
++    ; fi
++
++build:
++    ARG LINK_TYPE="$LINK_TYPE_DEFAULT" # static or dynamic
++    FROM +build-env --LINK_TYPE="$LINK_TYPE"
++    WORKDIR /src
++    COPY --dir boot cmake extra libs src vm .
++    COPY CMakeLists.txt CHANGES LICENSE README.md .
++    WORKDIR /src/build
++    RUN case "$LINK_TYPE" in \
++            static)  cmake .. -DSTATIC_DEPS=all  -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo;; \
++            dynamic) cmake .. -DSTATIC_DEPS=none -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo;; \
++            *) exit 1;; \
++        esac
++    RUN if [ "$LINK_TYPE" = "static" ]; then ninja download_static_deps; fi
++    RUN ninja
++    RUN ninja test
++    SAVE ARTIFACT bin/*
++
++package:
++    ARG LINK_TYPE="$LINK_TYPE_DEFAULT" # static or dynamic
++    FROM +build --LINK_TYPE="$LINK_TYPE"
++    RUN ninja package
++    # ARG --required TARGETOS
++    # ARG --required TARGETARCH
++    # RUN mv bin/neko-*.tar.gz "bin/neko-$(cmake -L -N -B . | awk -F '=' '/NEKO_VERSION/ {print $2}')-${TARGETOS}-${TARGETARCH}.tar.gz"
++    ARG --required TARGETPLATFORM
++    SAVE ARTIFACT --keep-ts bin/neko-*.tar.gz AS LOCAL bin/$LINK_TYPE/$TARGETPLATFORM/
++
++package-all-platforms:
++    BUILD --platform=linux/amd64 --platform=linux/arm64 +package
++
++extract-package:
++    ARG LINK_TYPE="$LINK_TYPE_DEFAULT" # static or dynamic
++    FROM +package --LINK_TYPE="$LINK_TYPE"
++    WORKDIR bin
++    RUN mkdir /tmp/neko && tar xf neko-*.tar.gz --strip-components 1 -C /tmp/neko
++    SAVE ARTIFACT /tmp/neko neko
++
++test-static-package:
++    ARG IMAGE=ubuntu:xenial
++    FROM $IMAGE
++    WORKDIR /tmp/neko
++    COPY +extract-package/neko .
++    ARG PREFIX=/usr/local
++    RUN mkdir -p $PREFIX/bin \
++        && mv neko nekotools nekoc nekoml $PREFIX/bin \
++        && mkdir -p $PREFIX/lib/neko \
++        && mv *.ndll nekoml.std $PREFIX/lib/neko \
++        && mv *.so* $PREFIX/lib \
++        && rm -rf * \
++        && ldconfig
++    RUN neko -version
++    RUN nekoc
++    RUN nekoml
++    RUN nekotools
++
++test-static-package-all-platforms:
++    ARG IMAGE=ubuntu:xenial
++    BUILD --platform=linux/amd64 --platform=linux/arm64 +test-static-package --IMAGE="$IMAGE"
+--- a/README.md
++++ b/README.md
+@@ -35,7 +35,7 @@
+ |-----------------------------------------|-------------|-----------------------------------------------------------|
+ | Boehm GC                                | all         | libgc-dev                                                 |
+ | OpenSSL                                 | all         | libssl-dev                                                |
+-| PCRE                                    | all         | libpcre3-dev                                              |
++| pcre2                                   | all         | libpcre2-dev                                              |
+ | zlib                                    | all         | zlib1g-dev                                                |
+ | Apache 2.2 / 2.4, with apr and apr-util | all         | apache2-dev                                               |
+ | MariaDB / MySQL (Connector/C)           | all         | libmariadb-client-lgpl-dev-compat (or libmysqlclient-dev) |
+@@ -109,7 +109,7 @@
+ 
+ Default value: `all` for Windows, `none` otherwise
+ 
+-It defines the dependencies that should be linked statically. Can be `all`, `none`, or a list of library names (e.g. `BoehmGC;Zlib;OpenSSL;MariaDBConnector;PCRE;Sqlite3;APR;APRutil;Apache;MbedTLS`).
++It defines the dependencies that should be linked statically. Can be `all`, `none`, or a list of library names (e.g. `BoehmGC;Zlib;OpenSSL;MariaDBConnector;pcre2;Sqlite3;APR;APRutil;Apache;MbedTLS`). NOTE: On MacOS, APRutil cannot be added here as it has become part of the APR version used on MacOS builds.
+ 
+ CMake will automatically download and build the specified dependencies into the build folder. If a library is not present in this list, it should be installed manually, and it will be linked dynamically.
+ 
+--- a/cmake/FindPCRE.cmake
++++ /dev/null
+@@ -1,55 +0,0 @@
+-# https://github.com/CBL-ORION/Vaa3D-tools-mirror/blob/filter-large-files/released_plugins/v3d_plugins/neurontracing_neutube/src_neutube/neurolabi/c/cmake_modules/FindPCRE.cmake
+-
+-# - Try to find PCRE
+-# Once done, this will define
+-#
+-#  PCRE_FOUND - system has PCRE
+-#  PCRE_INCLUDE_DIRS - the PCRE include directories
+-#  PCRE_LIBRARIES - link these to use PCRE
+-#
+-# By default, the dynamic libraries will be found. To find the static ones instead,
+-# you must set the PCRE_STATIC_LIBRARY variable to TRUE before calling find_package.
+-#
+-
+-include(LibFindMacros)
+-
+-# Use pkg-config to get hints about paths
+-libfind_pkg_check_modules(PCRE_PKGCONF libpcre)
+-
+-# attempt to find static library first if this is set
+-if(PCRE_STATIC_LIBRARY)
+-  set(PCRE_POSIX_STATIC libpcreposix.a)
+-  set(PCRE_STATIC libpcre.a)
+-endif(PCRE_STATIC_LIBRARY)
+-
+-# additional hints
+-if(MINGW)
+-  set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} C:/Mingw)
+-endif(MINGW)
+-
+-if(MSVC)
+-  set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} D:/devlib/vc/PCRE)
+-endif(MSVC)
+-
+-# Include dir
+-find_path(PCRE_INCLUDE_DIR
+-  NAMES pcreposix.h
+-  PATHS ${PCRE_PKGCONF_INCLUDE_DIRS}
+-)
+-
+-# Finally the library itself
+-find_library(PCRE_POSIX_LIBRARY
+-  NAMES ${PCRE_POSIX_STATIC} pcreposix
+-  PATHS ${PCRE_PKGCONF_LIBRARY_DIRS}
+-)
+-find_library(PCRE_LIBRARY
+-  NAMES ${PCRE_STATIC} pcre
+-  PATHS ${PCRE_PKGCONF_LIBRARY_DIRS}
+-)
+-set(PCRE_POSIX_LIBRARY ${PCRE_POSIX_LIBRARY} ${PCRE_LIBRARY})
+-
+-# Set the include dir variables and the libraries and let libfind_process do the rest.
+-# NOTE: Singular variables for this library, plural for libraries this this lib depends on.
+-set(PCRE_PROCESS_INCLUDES PCRE_INCLUDE_DIR)
+-set(PCRE_PROCESS_LIBS PCRE_POSIX_LIBRARY)
+-libfind_process(PCRE)
+\ No newline at end of file
+--- /dev/null
++++ b/cmake/FindPCRE2.cmake
+@@ -0,0 +1,19 @@
++# https://github.com/refu-lang/rfbase/blob/master/cmake/FindPCRE2.cmake
++
++# This CMake file tries to find the Perl regular expression libraries
++# The following variables are set:
++# PCRE2_FOUND - System has the PCRE library
++# PCRE2_LIBRARIES - The PCRE library file
++# PCRE2_INCLUDE_DIRS - The folder with the PCRE headers
++
++find_library(PCRE2_LIBRARIES NAMES pcre2 pcre2-8)
++find_path(PCRE2_INCLUDE_DIRS pcre2.h)
++if(PCRE2_LIBRARIES AND PCRE2_INCLUDE_DIRS)
++  message(STATUS "PCRE2 libs: ${PCRE2_LIBRARIES}")
++  message(STATUS "PCRE2 include directory: ${PCRE2_INCLUDE_DIRS}")
++  set(PCRE2_FOUND TRUE CACHE BOOL "Found PCRE2 libraries" FORCE)
++  add_custom_target(pcre2)
++else()
++  set(PCRE2_FOUND FALSE CACHE BOOL "Found PCRE2 libraries" FORCE)
++  message(STATUS "PCRE2 library not found.")
++endif()
+--- a/extra/azure-pipelines/Brewfile-STATIC_DEPS_NONE
++++ b/extra/azure-pipelines/Brewfile-STATIC_DEPS_NONE
+@@ -3,5 +3,5 @@
+ brew "pkg-config"
+ brew "bdw-gc"
+ brew "mariadb-connector-c"
+-brew "mbedtls"
+-brew "pcre"
++brew "mbedtls@2", link: true
++brew "pcre2"
+--- a/libs/CMakeLists.txt
++++ b/libs/CMakeLists.txt
+@@ -41,13 +41,14 @@
+ 			set(APRUTIL_CONF "")
+ 			set(APRUTIL_DEP "")
+ 		endif()
+-		if (STATIC_PCRE)
++		# APACHE still uses old pcre currently
++		# if (STATIC_PCRE2)
+ 			set(PCRE_CONF --with-pcre=${CMAKE_BINARY_DIR}/libs/src/install-prefix)
+ 			set(PCRE_DEP PCRE)
+-		elseif()
+-			set(PCRE_CONF "")
+-			set(PCRE_DEP "")
+-		endif()
++		# elseif()
++		# 	set(PCRE_CONF "")
++		# 	set(PCRE_DEP "")
++		# endif()
+ 		if (STATIC_ZLIB)
+ 			set(ZLIB_CONF --with-z=${CMAKE_BINARY_DIR}/libs/src/install-prefix)
+ 			set(ZLIB_DEP Zlib)
+@@ -83,6 +84,80 @@
+ 					make install
+ 			)
+ 		endif()
++
++		# Apache still uses old PCRE. Remove this once they migrate
++		## Start of PCRE download info
++		set(PCRE_URL_DATA
++			URL "https://downloads.sourceforge.net/project/pcre/pcre/8.45/pcre-8.45.tar.gz"
++			URL_HASH SHA1=a19402ce56d770da1557cf331b109d33adb74062
++		)
++		if (WIN32)
++			ExternalProject_Add(PCRE
++				${EP_CONFIGS}
++				${PCRE_URL_DATA}
++				CMAKE_ARGS
++					-G ${CMAKE_GENERATOR}
++					-DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/libs/src/install-prefix
++					-Wno-dev
++					-DPCRE_BUILD_PCRECPP=OFF
++					-DPCRE_BUILD_PCREGREP=OFF
++					-DPCRE_BUILD_TESTS=OFF
++					-DPCRE_SUPPORT_JIT=ON
++					-DPCRE_SUPPORT_UNICODE_PROPERTIES=ON
++			)
++			set(PCRE_LIBRARIES
++				optimized ${CMAKE_BINARY_DIR}/libs/src/install-prefix/lib/pcre.lib
++				debug ${CMAKE_BINARY_DIR}/libs/src/install-prefix/lib/pcred.lib
++			)
++		else()
++			if (APPLE)
++				set(PCRE_CFLAGS "-w -mmacosx-version-min=${CMAKE_OSX_DEPLOYMENT_TARGET}")
++			else()
++				set(PCRE_CFLAGS "-w")
++			endif()
++			set(PCRE_LIBRARIES
++				${CMAKE_BINARY_DIR}/libs/src/install-prefix/lib/libpcre.a
++			)
++			ExternalProject_Add(PCRE
++				${EP_CONFIGS}
++				${PCRE_URL_DATA}
++				CONFIGURE_COMMAND cd ${CMAKE_BINARY_DIR}/libs/src/PCRE &&
++					./configure
++						--prefix=${CMAKE_BINARY_DIR}/libs/src/install-prefix
++						--with-pic
++						--enable-unicode-properties
++						--enable-silent-rules
++						--enable-jit
++						--disable-cpp
++						--enable-shared=no
++						--enable-static=yes
++						--silent
++				BUILD_COMMAND cd ${CMAKE_BINARY_DIR}/libs/src/PCRE &&
++					make "CFLAGS=${PCRE_CFLAGS}"
++				INSTALL_COMMAND cd ${CMAKE_BINARY_DIR}/libs/src/PCRE &&
++					make install
++				BYPRODUCTS ${PCRE_LIBRARIES}
++			)
++		endif()
++
++		set_target_properties(PCRE PROPERTIES ${EP_PROPS})
++		# don't want to add PCRE 1 to external_deps,
++		# but want download_static_deps depends on it
++		add_dependencies(download_static_deps PCRE-download)
++
++		## End of PCRE download info
++
++		if (APPLE) # We need to use the most up to date version on MacOS
++			set(APR_SOURCE
++				SVN_REPOSITORY https://svn.apache.org/repos/asf/apr/apr/trunk/
++				UPDATE_COMMAND ./buildconf
++			)
++		else()
++			set(APR_SOURCE
++				URL http://archive.apache.org/dist/apr/apr-1.5.2.tar.gz
++				URL_MD5 98492e965963f852ab29f9e61b2ad700
++			)
++		endif()
+ 		ExternalProject_Add(APR
+ 			${EP_CONFIGS}
+ 			URL http://archive.apache.org/dist/apr/apr-1.5.2.tar.gz
+--- a/libs/regexp/CMakeLists.txt
++++ b/libs/regexp/CMakeLists.txt
+@@ -3,52 +3,52 @@
+ # regexp.ndll
+ 
+ add_library(regexp.ndll MODULE regexp.c)
+-if (STATIC_PCRE)
++if (STATIC_PCRE2)
++	add_compile_definitions(PCRE2_STATIC_LINK)
+ 	if (WIN32)
+-		set(PCRE_URL "https://ftp.pcre.org/pub/pcre/pcre-8.42.tar.gz")
++		set(PCRE2_URL "https://github.com/PhilipHazel/pcre2/releases/download/pcre2-10.37/pcre2-10.37.tar.gz")
+ 		if (NOT ${CMAKE_VERSION} VERSION_LESS 3.7)
+-			list(APPEND PCRE_URL
+-				"http://downloads.sourceforge.net/project/pcre/pcre/8.42/pcre-8.42.tar.gz"
++			list(APPEND PCRE2_URL
++				"https://sourceforge.net/projects/pcre/files/pcre2/10.37/pcre2-10.37.tar.gz/download"
+ 			)
+ 		endif()
+-		ExternalProject_Add(PCRE
++		ExternalProject_Add(pcre2
+ 			${EP_CONFIGS}
+-			URL ${PCRE_URL}
+-			URL_MD5 fc18afa0f14a25475cf097ee102a3e4f
++			URL ${PCRE2_URL}
++			URL_MD5 a0b59d89828f62d2e1caac04f7c51e0b
+ 			CMAKE_ARGS
+ 				-G ${CMAKE_GENERATOR}
+ 				-DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/libs/src/install-prefix
+ 				-Wno-dev
+-				-DPCRE_BUILD_PCRECPP=OFF
+-				-DPCRE_BUILD_PCREGREP=OFF
+-				-DPCRE_BUILD_TESTS=OFF
+-				-DPCRE_SUPPORT_JIT=ON
+-				-DPCRE_SUPPORT_UNICODE_PROPERTIES=ON
++				-DPCRE2_BUILD_PCRE2GREP=OFF
++				-DPCRE2_BUILD_TESTS=OFF
++				-DPCRE2_SUPPORT_JIT=ON
++				-DPCRE2_SUPPORT_UNICODE=ON
+ 		)
+-		set(PCRE_LIBRARIES
+-			optimized ${CMAKE_BINARY_DIR}/libs/src/install-prefix/lib/pcre.lib
+-			debug ${CMAKE_BINARY_DIR}/libs/src/install-prefix/lib/pcred.lib
++		set(PCRE2_LIBRARIES
++			optimized ${CMAKE_BINARY_DIR}/libs/src/install-prefix/lib/pcre2-8.lib
++			debug ${CMAKE_BINARY_DIR}/libs/src/install-prefix/lib/pcre2-8d.lib
+ 		)
+ 	else()
+ 		if (APPLE)
+-			set(PCRE_CFLAGS "-w -mmacosx-version-min=${CMAKE_OSX_DEPLOYMENT_TARGET}")
++			set(PCRE2_CFLAGS "-w -mmacosx-version-min=${CMAKE_OSX_DEPLOYMENT_TARGET}")
+ 		else()
+-			set(PCRE_CFLAGS "-w")
++			set(PCRE2_CFLAGS "-w")
+ 		endif()
+-		set(PCRE_LIBRARIES
+-			${CMAKE_BINARY_DIR}/libs/src/install-prefix/lib/libpcre.a
++		set(PCRE2_LIBRARIES
++			${CMAKE_BINARY_DIR}/libs/src/install-prefix/lib/libpcre2-8.a
+ 		)
+-		set(PCRE_URL "https://ftp.pcre.org/pub/pcre/pcre-8.40.tar.gz")
++		set(PCRE2_URL "https://github.com/PhilipHazel/pcre2/releases/download/pcre2-10.37/pcre2-10.37.tar.gz")
+ 		if (NOT ${CMAKE_VERSION} VERSION_LESS 3.7)
+-			list(APPEND PCRE_URL
+-				"http://downloads.sourceforge.net/project/pcre/pcre/8.40/pcre-8.40.tar.gz"
++			list(APPEND PCRE2_URL
++				"https://sourceforge.net/projects/pcre/files/pcre2/10.37/pcre2-10.37.tar.gz/download"
+ 			)
+ 		endif()
+-		ExternalProject_Add(PCRE
++		ExternalProject_Add(pcre2
+ 			${EP_CONFIGS}
+-			URL ${PCRE_URL}
+-			URL_MD5 890c808122bd90f398e6bc40ec862102
+-			CONFIGURE_COMMAND cd ${CMAKE_BINARY_DIR}/libs/src/PCRE &&
++			URL ${PCRE2_URL}
++			URL_MD5 a0b59d89828f62d2e1caac04f7c51e0b
++			CONFIGURE_COMMAND cd ${CMAKE_BINARY_DIR}/libs/src/pcre2 &&
+ 				./configure
+ 					--prefix=${CMAKE_BINARY_DIR}/libs/src/install-prefix
+ 					--with-pic
+@@ -59,24 +59,24 @@
+ 					--enable-shared=no
+ 					--enable-static=yes
+ 					--silent
+-			BUILD_COMMAND cd ${CMAKE_BINARY_DIR}/libs/src/PCRE &&
++			BUILD_COMMAND cd ${CMAKE_BINARY_DIR}/libs/src/pcre2 &&
+ 				make "CFLAGS=${PCRE_CFLAGS}"
+-			INSTALL_COMMAND cd ${CMAKE_BINARY_DIR}/libs/src/PCRE &&
++			INSTALL_COMMAND cd ${CMAKE_BINARY_DIR}/libs/src/pcre2 &&
+ 				make install
+-			BYPRODUCTS ${PCRE_LIBRARIES}
++			BYPRODUCTS ${PCRE2_LIBRARIES}
+ 		)
+ 	endif()
+-	set_target_properties(PCRE PROPERTIES ${EP_PROPS})
+-	set(PCRE_INCLUDE_DIRS ${CMAKE_BINARY_DIR}/libs/src/install-prefix/include)
+-	add_dependencies(regexp.ndll PCRE)
++	set_target_properties(pcre2 PROPERTIES ${EP_PROPS})
++	set(PCRE2_INCLUDE_DIRS ${CMAKE_BINARY_DIR}/libs/src/install-prefix/include)
++	add_dependencies(regexp.ndll pcre2)
+ 	# Download project for fat source archive
+-	add_dependencies(download_static_deps PCRE-download)
++	add_dependencies(download_static_deps pcre2-download)
+ else()
+-	find_package(PCRE REQUIRED)
++	find_package(PCRE2 REQUIRED)
+ endif()
+ 
+-target_include_directories(regexp.ndll PRIVATE ${PCRE_INCLUDE_DIRS})
+-target_link_libraries(regexp.ndll libneko ${PCRE_LIBRARIES})
++target_include_directories(regexp.ndll PRIVATE ${PCRE2_INCLUDE_DIRS})
++target_link_libraries(regexp.ndll libneko ${PCRE2_LIBRARIES})
+ 
+ set_target_properties(regexp.ndll
+ 	PROPERTIES
+--- a/libs/regexp/regexp.c
++++ b/libs/regexp/regexp.c
+@@ -21,23 +21,33 @@
+  */
+ #include <neko.h>
+ #include <string.h>
+-#define PCRE_STATIC
+-#include <pcre.h>
++
++#define PCRE2_CODE_UNIT_WIDTH 8
++
++#ifdef PCRE2_STATIC_LINK
++// this must be defined before loading the pcre header
++#define PCRE2_STATIC
++#endif
++#include <pcre2.h>
+ 
+ #define PCRE(o)		((pcredata*)val_data(o))
+ 
+ typedef struct {
++	// The compiled regex code
++	pcre2_code *regex;
++	// Number of capture groups
++	int n_groups;
++
++	// The last string matched
+ 	value str;
+-	pcre *r;
+-	int nmatchs;
+-	int *matchs;
++	// Pointer to the allocated memory for match data
++	pcre2_match_data *match_data;
+ } pcredata;
+ 
+ DEFINE_KIND(k_regexp);
+ 
+ static field id_pos;
+ static field id_len;
+-static pcre_extra limit;
+ 
+ /**
+ 	<doc>
+@@ -48,16 +58,18 @@
+ 	</doc>
+ **/
+ 
+-static void free_regexp( value p ) {	
+-	pcre_free( PCRE(p)->r );
++static void free_regexp( value p ) {
++	pcre2_code_free( PCRE(p)->regex );
++	pcre2_match_data_free( PCRE(p)->match_data );
+ }
+ 
+-static int do_exec( pcredata *d, const char *str, int len, int pos ) {
+-	int res = pcre_exec(d->r,&limit,str,len,pos,0,d->matchs,d->nmatchs * 3);
++static int do_match( pcredata *d, const char *str, int len, int pos ) {
++	int res = pcre2_match(d->regex,str,len,pos,0,d->match_data,NULL);
+ 	if( res >= 0 )
+ 		return 1;
+-	if( res != PCRE_ERROR_NOMATCH )
+-		val_throw(alloc_string("An error occurred while running pcre_exec"));
++	d->str = val_null; // empty string prevents trying to access the data after a failed match
++	if( res != PCRE2_ERROR_NOMATCH )
++		val_throw(alloc_string("An error occurred while running pcre2_match"));
+ 	return 0;
+ }
+ 
+@@ -78,53 +90,55 @@
+ 	val_check(opt,string);
+ 	{
+ 		value v;
+-		const char *error;
+-		int err_offset;
+-		pcre *p;
++		int error_num;
++		size_t err_offset;
++		pcre2_code *p;
+ 		pcredata *pdata;
+ 		char *o = val_string(opt);
+ 		int options = 0;
+ 		while( *o ) {
+ 			switch( *o++ ) {
+ 			case 'i':
+-				options |= PCRE_CASELESS;
++				options |= PCRE2_CASELESS;
+ 				break;
+ 			case 's':
+-				options |= PCRE_DOTALL;
++				options |= PCRE2_DOTALL;
+ 				break;
+ 			case 'm':
+-				options |= PCRE_MULTILINE;
++				options |= PCRE2_MULTILINE;
+ 				break;
+ 			case 'u':
+-				options |= PCRE_UTF8;
++				options |= PCRE2_UTF;
+ 				break;
+ 			case 'g':
+-				options |= PCRE_UNGREEDY;
++				options |= PCRE2_UNGREEDY;
+ 				break;
+ 			default:
+ 				neko_error();
+ 				break;
+ 			}
+ 		}
+-		p = pcre_compile(val_string(s),options,&error,&err_offset,NULL);
++		p = pcre2_compile(val_string(s),val_strlen(s),options,&error_num,&err_offset,NULL);
+ 		if( p == NULL ) {
+ 			buffer b = alloc_buffer("Regexp compilation error : ");
+-			buffer_append(b,error);
++			PCRE2_UCHAR error_buffer[256];
++			pcre2_get_error_message(error_num,error_buffer,sizeof(error_buffer));
++			buffer_append(b,error_buffer);
+ 			buffer_append(b," in ");
+ 			val_buffer(b,s);
+ 			bfailure(b);
+ 		}
+ 		v = alloc_abstract(k_regexp,alloc(sizeof(pcredata)));
+ 		pdata = PCRE(v);
+-		pdata->r = p;
++		pdata->regex = p;
+ 		pdata->str = val_null;
+-		pdata->nmatchs = 0;
+-		pcre_fullinfo(p,NULL,PCRE_INFO_CAPTURECOUNT,&pdata->nmatchs);
+-		pdata->nmatchs++;
+-		pdata->matchs = (int*)alloc_private(sizeof(int) * 3 * pdata->nmatchs);
++		pdata->n_groups = 0;
++		pcre2_pattern_info(pdata->regex,PCRE2_INFO_CAPTURECOUNT,&pdata->n_groups);
++		pdata->n_groups++;
++		pdata->match_data = pcre2_match_data_create_from_pattern(pdata->regex,NULL);
+ 		val_gc(v,free_regexp);
+ 		return v;
+-	}	
++	}
+ }
+ 
+ /**
+@@ -152,7 +166,7 @@
+ 	if( pp < 0 || ll < 0 || pp > val_strlen(s) || pp + ll > val_strlen(s) )
+ 		neko_error();
+ 	d = PCRE(o);
+-	if( do_exec(d,val_string(s),ll+pp,pp) ) {
++	if( do_match(d,val_string(s),ll+pp,pp) ) {
+ 		d->str = s;
+ 		return val_true;
+ 	} else {
+@@ -161,22 +175,25 @@
+ 	}
+ }
+ 
+-static value do_replace( value o, value s, value s2, bool all ) {	
+-	val_check_kind(o,k_regexp);	
++static value do_replace( value o, value s, value s2, bool all ) {
++	val_check_kind(o,k_regexp);
+ 	val_check(s,string);
+-	val_check(s2,string);	
++	val_check(s2,string);
+ 	{
+ 		pcredata *d = PCRE(o);
+ 		buffer b = alloc_buffer(NULL);
+-		int pos = 0;
+-		int len = val_strlen(s);
+ 		const char *str = val_string(s);
+ 		const char *str2 = val_string(s2);
++		int len = val_strlen(s);
+ 		int len2 = val_strlen(s2);
+-		while( do_exec(d,str,len,pos) ) {
+-			buffer_append_sub(b,str+pos,d->matchs[0] - pos);
++		int pos = 0;
++		size_t *matches;
++		// TODO: Consider pcre2_substitute()
++		while( do_match(d,str,len,pos) ) {
++			matches = pcre2_get_ovector_pointer(d->match_data);
++			buffer_append_sub(b,str+pos,matches[0] - pos);
+ 			buffer_append_sub(b,str2,len2);
+-			pos = d->matchs[1];
++			pos = matches[1];
+ 			if( !all )
+ 				break;
+ 		}
+@@ -190,7 +207,7 @@
+ 	regexp_replace : 'regexp -> from:string -> by:string -> string
+ 	<doc>Perform a replacement using a regexp</doc>
+ **/
+-static value regexp_replace( value o, value s, value s2 ) {	
++static value regexp_replace( value o, value s, value s2 ) {
+ 	return do_replace(o,s,s2,false);
+ }
+ 
+@@ -216,11 +233,13 @@
+ 		int pos = 0;
+ 		int len = val_strlen(s);
+ 		const char *str = val_string(s);
++		size_t *matches;
+ 		d->str = s;
+-		while( do_exec(d,str,len,pos) ) {
+-			buffer_append_sub(b,str+pos,d->matchs[0] - pos);
++		while( do_match(d,str,len,pos) ) {
++			matches = pcre2_get_ovector_pointer(d->match_data);
++			buffer_append_sub(b,str+pos,matches[0] - pos);
+ 			val_buffer(b,val_call1(f,o));
+-			pos = d->matchs[1];
++			pos = matches[1];
+ 		}
+ 		d->str = val_null;
+ 		buffer_append_sub(b,str+pos,len-pos);
+@@ -230,21 +249,22 @@
+ 
+ /**
+ 	regexp_matched : 'regexp -> n:int -> string?
+-	<doc>Return the [n]th matched block by the regexp. If [n] is 0 then return 
++	<doc>Return the [n]th matched block by the regexp. If [n] is 0 then return
+ 	the whole matched substring. If the [n]th matched block was optional and not matched, returns null</doc>
+ **/
+ static value regexp_matched( value o, value n ) {
+ 	pcredata *d;
+ 	int m;
+-	val_check_kind(o,k_regexp);	
++	val_check_kind(o,k_regexp);
+ 	d = PCRE(o);
+ 	val_check(n,int);
+ 	m = val_int(n);
+-	if( m < 0 || m >= d->nmatchs || val_is_null(d->str) )
++	if( m < 0 || m >= d->n_groups || val_is_null(d->str) )
+ 		neko_error();
+ 	{
+-		int start = d->matchs[m*2];
+-		int len = d->matchs[m*2+1] - start;
++		size_t *matches = pcre2_get_ovector_pointer(d->match_data);
++		int start = matches[m*2];
++		int len = matches[m*2+1] - start;
+ 		value str;
+ 		if( start == -1 )
+ 			return val_null;
+@@ -262,15 +282,16 @@
+ static value regexp_matched_pos( value o, value n ) {
+ 	pcredata *d;
+ 	int m;
+-	val_check_kind(o,k_regexp);	
++	val_check_kind(o,k_regexp);
+ 	d = PCRE(o);
+ 	val_check(n,int);
+ 	m = val_int(n);
+-	if( m < 0 || m >= d->nmatchs || val_is_null(d->str) )
++	if( m < 0 || m >= d->n_groups || val_is_null(d->str) )
+ 		neko_error();
+ 	{
+-		int start = d->matchs[m*2];
+-		int len = d->matchs[m*2+1] - start;
++		size_t *matches = pcre2_get_ovector_pointer(d->match_data);
++		int start = matches[m*2];
++		int len = matches[m*2+1] - start;
+ 		value o = alloc_object(NULL);
+ 		alloc_field(o,id_pos,alloc_int(start));
+ 		alloc_field(o,id_len,alloc_int(len));
+@@ -280,9 +301,7 @@
+ 
+ void regexp_main() {
+ 	id_pos = val_id("pos");
+-	id_len = val_id("len");	
+-	limit.flags = PCRE_EXTRA_MATCH_LIMIT_RECURSION;
+-	limit.match_limit_recursion = 3500; // adapted based on Windows 1MB stack size
++	id_len = val_id("len");
+ }
+ 
+ DEFINE_PRIM(regexp_new,1);

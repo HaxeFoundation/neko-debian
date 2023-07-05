@@ -1,3 +1,13 @@
+neko (2.3.0-2) unstable; urgency=medium
+
+  * Add pcre2.patch from upstream. (Closes: #1000057)
+  * Add gtk3.patch from upstream. (Closes: #967651)
+  * Bump Standards-Version to 4.6.2.0 (no changes).
+  * Bump debhelper and compat level to 12 (no changes).
+  * Remove hashbang from neko.bash-completion to clear lintian warning.
+
+ -- Andy Li <andy@onthewings.net>  Wed, 05 Jul 2023 11:34:34 +0000
+
 neko (2.3.0-1) unstable; urgency=medium
 
   * New upstream version.

@@ -1,0 +1,262 @@
+From 68a4c842313958a93ecd835b1471ff80e696f6c6 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Alexander=20F=2E=20R=C3=B8dseth?=
+ <52813+xyproto@users.noreply.github.com>
+Date: Mon, 27 Mar 2023 22:04:53 +0200
+Subject: [PATCH] Port from GTK 2 to GTK 3 (#220)
+
+* Port from GTK 2 to GTK 3
+
+* Update the Earthfile
+
+* Add missing line from README
+
+* Update the Earthfile
+# Conflicts:
+#	CMakeLists.txt
+#	README.md
+---
+ CMakeLists.txt                           | 12 +++---
+ Earthfile                                |  4 +-
+ README.md                                |  6 +--
+ azure-pipelines.yml                      |  2 +-
+ cmake/{FindGTK2.cmake => FindGTK3.cmake} | 54 ++++++++++++------------
+ libs/ui/CMakeLists.txt                   |  8 ++--
+ libs/ui/ui.c                             |  4 +-
+ 7 files changed, 45 insertions(+), 45 deletions(-)
+ rename cmake/{FindGTK2.cmake => FindGTK3.cmake} (56%)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 9734ceb..d5c95fa 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -43,12 +43,12 @@ set(NEKO_VERSION ${NEKO_VERSION_MAJOR}.${NEKO_VERSION_MINOR}.${NEKO_VERSION_PATC
+ # Determine target endianness
+ TEST_BIG_ENDIAN(NEKO_BIG_ENDIAN)
+ 
+-option(WITH_REGEXP "Build Perl-compatible regex support." ON)
+-option(WITH_UI "Build GTK-2 UI support." ON)
+-option(WITH_SSL "Build SSL support." ON)
+-option(WITH_MYSQL "Build MySQL support." ON)
+-option(WITH_SQLITE "Build Sqlite support." ON)
+-option(WITH_APACHE "Build Apach modules." ON)
++option(WITH_REGEXP "Build with Perl-compatible regex support." ON)
++option(WITH_UI "Build with GTK-3 UI support." ON)
++option(WITH_SSL "Build with SSL support." ON)
++option(WITH_MYSQL "Build with MySQL support." ON)
++option(WITH_SQLITE "Build with Sqlite support." ON)
++option(WITH_APACHE "Build with Apache modules." ON)
+ option(WITH_NEKOML "Build NekoML." ON)
+ 
+ # Process common headers in libraries
+diff --git a/Earthfile b/Earthfile
+index 14057f8..925d126 100644
+--- a/Earthfile
++++ b/Earthfile
+@@ -55,7 +55,7 @@ devcontainer-base:
+             cmake \
+             ninja-build \
+             pkg-config \
+-            libgtk2.0-dev \
++            libgtk-3-dev \
+             $LINK_DYNAMIC_PACKAGES \
+         #
+         # Clean up
+@@ -147,7 +147,7 @@ build-env:
+             git \
+             ninja-build \
+             pkg-config \
+-            libgtk2.0-dev \
++            libgtk-3-dev \
+         #
+         # Clean up
+         && apt-get autoremove -y \
+diff --git a/README.md b/README.md
+index 0a8b573..5d1e727 100644
+--- a/README.md
++++ b/README.md
+@@ -41,7 +41,7 @@ Neko needs to link with various third-party libraries, which are summarized as f
+ | MariaDB / MySQL (Connector/C)           | all         | libmariadb-client-lgpl-dev-compat (or libmysqlclient-dev) |
+ | SQLite                                  | all         | libsqlite3-dev                                            |
+ | mbed TLS                                | all         | libmbedtls-dev                                            |
+-| GTK+2                                   | Linux       | libgtk2.0-dev                                             |
++| GTK+3                                   | Linux       | libgtk-3-dev                                              |
+ 
+ On Windows, CMake will automatically download and build the libraries in the build folder during the build process. However, you need to install [Perl](http://www.activestate.com/activeperl) manually because OpenSSL needs it for configuration. On Mac/Linux, you should install the libraries manually to your system before building Neko, or use the `STATIC_DEPS` CMake option, which will be explained in [CMake options](#cmake-options).
+ 
+@@ -99,7 +99,7 @@ cmake "-Doption=value" ..
+ Settings that allow to exclude libraries and their dependencies from the build; available on all platforms. By default all are `ON`:
+ 
+ - `WITH_REGEXP` - Build Perl-compatible regex support
+-- `WITH_UI` - Build GTK-2 UI support
++- `WITH_UI` - Build GTK-3 UI support
+ - `WITH_SSL` - Build SSL support
+ - `WITH_MYSQL` - Build MySQL support
+ - `WITH_SQLITE` - Build Sqlite support
+@@ -113,7 +113,7 @@ It defines the dependencies that should be linked statically. Can be `all`, `non
+ 
+ CMake will automatically download and build the specified dependencies into the build folder. If a library is not present in this list, it should be installed manually, and it will be linked dynamically.
+ 
+-All third-party libraries, except GTK+2 (Linux), can be linked statically. We do not support statically linking GTK+2 due to the difficulty of building it and its own dependencies.
++All third-party libraries, except GTK+3 (Linux) and BoehmGC on Windows, can be linked statically. We do not support statically linking GTK+3 due to the difficulty of building it and its own dependencies. Additionally, we do not support statically linking the BoehmGC library on Windows systems. Finally, on MacOS, APRutil cannot be linked statically as it has been merged with APR 2.0, which is used on MacOS builds.
+ 
+ #### `RELOCATABLE`
+ 
+diff --git a/azure-pipelines.yml b/azure-pipelines.yml
+index 85452cd..8042e09 100644
+--- a/azure-pipelines.yml
++++ b/azure-pipelines.yml
+@@ -148,7 +148,7 @@ stages:
+           - script: |
+               set -ex
+               sudo apt-get update -qqy
+-              sudo apt-get install -qqy ninja-build pkg-config libgtk2.0-dev devscripts git-buildpackage ubuntu-dev-tools dh-make dh-apache2
++              sudo apt-get install -qqy ninja-build pkg-config libgtk-3-dev devscripts git-buildpackage ubuntu-dev-tools dh-make dh-apache2
+             displayName: Install devscripts
+           - script: cmake . -DSTATIC_DEPS=all
+             displayName: CMake
+diff --git a/cmake/FindGTK2.cmake b/cmake/FindGTK3.cmake
+similarity index 56%
+rename from cmake/FindGTK2.cmake
+rename to cmake/FindGTK3.cmake
+index e784692..714f66a 100644
+--- a/cmake/FindGTK2.cmake
++++ b/cmake/FindGTK3.cmake
+@@ -1,64 +1,64 @@
+-FILE(TO_CMAKE_PATH "$ENV{GTK2_DIR}" TRY1_DIR)
+-FILE(TO_CMAKE_PATH "${GTK2_DIR}" TRY2_DIR)
++FILE(TO_CMAKE_PATH "$ENV{GTK3_DIR}" TRY1_DIR)
++FILE(TO_CMAKE_PATH "${GTK3_DIR}" TRY2_DIR)
+ FILE(GLOB GTK_DIR ${TRY1_DIR} ${TRY2_DIR})
+ 
+-FIND_PATH(GTK_gtk_2_INCLUDE_DIR gtk/gtk.h
++FIND_PATH(GTK_gtk_3_INCLUDE_DIR gtk/gtk.h
+                                 ENV INCLUDE DOC "Directory containing gtk/gtk.h include file")
+ 
+-FIND_PATH(GTK_gdk_2_INCLUDE_DIR gdk/gdk.h
++FIND_PATH(GTK_gdk_3_INCLUDE_DIR gdk/gdk.h
+                                 ENV INCLUDE DOC "Directory containing gdk/gdk.h include file")
+ 
+-FIND_PATH(GTK_gdkconfig_2_INCLUDE_DIR gdkconfig.h
++FIND_PATH(GTK_gdkconfig_3_INCLUDE_DIR gdkconfig.h
+                                       ENV INCLUDE DOC "Directory containing gdkconfig.h include file")
+ 
+-FIND_LIBRARY(GTK_gdk_pixbuf_2_LIBRARY NAMES gdk_pixbuf-2.0
++FIND_LIBRARY(GTK_gdk_pixbuf_3_LIBRARY NAMES gdk_pixbuf-3.0
+                                       PATHS ${GTK_DIR}/lib ${GTK_DIR}/bin ${GTK_DIR}/win32/bin ${GTK_DIR}/lib ${GTK_DIR}/win32/lib /usr/local/lib /usr/lib
+                                       ENV LIB
+                                       DOC "gdk_pixbuf library to link with"
+                                       NO_SYSTEM_ENVIRONMENT_PATH)
+ 
+-FIND_LIBRARY(GTK_gdk_2_LIBRARY NAMES gdk-win32-2.0 gdk-x11-2.0
++FIND_LIBRARY(GTK_gdk_3_LIBRARY NAMES gdk-win32-3.0 gdk-x11-3.0
+                                      PATHS ${GTK_DIR}/lib ${GTK_DIR}/bin ${GTK_DIR}/win32/bin ${GTK_DIR}/lib ${GTK_DIR}/win32/lib /usr/lib /usr/local/lib
+                                      ENV LIB
+-                                     DOC "gdk2 library to link with"
++                                     DOC "gdk3 library to link with"
+                                      NO_SYSTEM_ENVIRONMENT_PATH)
+ 
+-FIND_LIBRARY(GTK_gtk_2_LIBRARY NAMES gtk-win32-2.0 gtk-x11-2.0
++FIND_LIBRARY(GTK_gtk_3_LIBRARY NAMES gtk-win32-3.0 gtk-x11-3.0
+                                      PATHS ${GTK_DIR}/lib ${GTK_DIR}/bin ${GTK_DIR}/win32/bin ${GTK_DIR}/lib ${GTK_DIR}/win32/lib /usr/lib /usr/local/lib
+                                      ENV LIB
+-                                     DOC "gtk2 library to link with"
++                                     DOC "gtk3 library to link with"
+                                      NO_SYSTEM_ENVIRONMENT_PATH)
+ 
+-FIND_LIBRARY(GTK_gdk_pixbuf_2_STATIC_LIBRARY NAMES libgdk_pixbuf-2.0.a
++FIND_LIBRARY(GTK_gdk_pixbuf_3_STATIC_LIBRARY NAMES libgdk_pixbuf-3.0.a
+                                       PATHS ${GTK_DIR}/lib ${GTK_DIR}/bin ${GTK_DIR}/win32/bin ${GTK_DIR}/lib ${GTK_DIR}/win32/lib /usr/local/lib /usr/lib
+                                       ENV LIB
+                                       DOC "gdk_pixbuf library to link with"
+                                       NO_SYSTEM_ENVIRONMENT_PATH)
+ 
+-FIND_LIBRARY(GTK_gdk_2_STATIC_LIBRARY NAMES libgdk-x11-2.0.a
++FIND_LIBRARY(GTK_gdk_3_STATIC_LIBRARY NAMES libgdk-x11-3.0.a
+                                      PATHS ${GTK_DIR}/lib ${GTK_DIR}/bin ${GTK_DIR}/win32/bin ${GTK_DIR}/lib ${GTK_DIR}/win32/lib /usr/lib /usr/local/lib
+                                      ENV LIB
+-                                     DOC "gdk2 library to link with"
++                                     DOC "gdk3 library to link with"
+                                      NO_SYSTEM_ENVIRONMENT_PATH)
+ 
+-FIND_LIBRARY(GTK_gtk_2_STATIC_LIBRARY NAMES libgtk-x11-2.0.a
++FIND_LIBRARY(GTK_gtk_3_STATIC_LIBRARY NAMES libgtk-x11-3.0.a
+                                      PATHS ${GTK_DIR}/lib ${GTK_DIR}/bin ${GTK_DIR}/win32/bin ${GTK_DIR}/lib ${GTK_DIR}/win32/lib /usr/lib /usr/local/lib
+                                      ENV LIB
+-                                     DOC "gtk2 library to link with"
++                                     DOC "gtk3 library to link with"
+                                      NO_SYSTEM_ENVIRONMENT_PATH)
+ 
+ 
+-IF (GTK_gtk_2_INCLUDE_DIR AND GTK_gdk_2_INCLUDE_DIR AND GTK_gdkconfig_2_INCLUDE_DIR)
+-  SET(GTK2_INCLUDE_DIR ${GTK_gtk_2_INCLUDE_DIR} ${GTK_gdk_2_INCLUDE_DIR} ${GTK_gdkconfig_2_INCLUDE_DIR})
+-  list(REMOVE_DUPLICATES GTK2_INCLUDE_DIR)
+-  SET(GTK2_LIBRARIES ${GTK_gdk_pixbuf_2_LIBRARY} ${GTK_gdk_2_LIBRARY} ${GTK_gtk_2_LIBRARY})
+-  list(REMOVE_DUPLICATES GTK2_LIBRARIES)
+-  SET(GTK2_STATIC_LIBRARIES ${GTK_gdk_pixbuf_2_STATIC_LIBRARY} ${GTK_gdk_2_STATIC_LIBRARY} ${GTK_gtk_2_STATIC_LIBRARY})
+-  list(REMOVE_DUPLICATES GTK2_STATIC_LIBRARIES)
+-  SET(GTK2_FOUND TRUE)
++IF (GTK_gtk_3_INCLUDE_DIR AND GTK_gdk_3_INCLUDE_DIR AND GTK_gdkconfig_3_INCLUDE_DIR)
++  SET(GTK3_INCLUDE_DIR ${GTK_gtk_3_INCLUDE_DIR} ${GTK_gdk_3_INCLUDE_DIR} ${GTK_gdkconfig_3_INCLUDE_DIR})
++  list(REMOVE_DUPLICATES GTK3_INCLUDE_DIR)
++  SET(GTK3_LIBRARIES ${GTK_gdk_pixbuf_3_LIBRARY} ${GTK_gdk_3_LIBRARY} ${GTK_gtk_3_LIBRARY})
++  list(REMOVE_DUPLICATES GTK3_LIBRARIES)
++  SET(GTK3_STATIC_LIBRARIES ${GTK_gdk_pixbuf_3_STATIC_LIBRARY} ${GTK_gdk_3_STATIC_LIBRARY} ${GTK_gtk_3_STATIC_LIBRARY})
++  list(REMOVE_DUPLICATES GTK3_STATIC_LIBRARIES)
++  SET(GTK3_FOUND TRUE)
+ 
+ 
+-  message(STATUS "GTK2_INCLUDE_DIR: ${GTK2_INCLUDE_DIR}")
+-  message(STATUS "GTK2_LIBRARIES: ${GTK2_LIBRARIES}")
+-  message(STATUS "GTK2_STATIC_LIBRARIES: ${GTK2_STATIC_LIBRARIES}")
+-ENDIF ()
+\ No newline at end of file
++  message(STATUS "GTK3_INCLUDE_DIR: ${GTK3_INCLUDE_DIR}")
++  message(STATUS "GTK3_LIBRARIES: ${GTK3_LIBRARIES}")
++  message(STATUS "GTK3_STATIC_LIBRARIES: ${GTK3_STATIC_LIBRARIES}")
++ENDIF ()
+diff --git a/libs/ui/CMakeLists.txt b/libs/ui/CMakeLists.txt
+index 72b37ba..e53b77c 100644
+--- a/libs/ui/CMakeLists.txt
++++ b/libs/ui/CMakeLists.txt
+@@ -11,12 +11,12 @@ if(APPLE)
+ 	find_library(CARBON_LIBRARY Carbon REQUIRED)
+ 	target_link_libraries(ui.ndll ${CARBON_LIBRARY})
+ elseif(UNIX)
+-	pkg_check_modules(GTK2 REQUIRED gtk+-2.0)
++	pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
+ 	target_include_directories(ui.ndll PRIVATE
+-		${GTK2_INCLUDEDIR}
+-		${GTK2_INCLUDE_DIRS}
++		${GTK3_INCLUDEDIR}
++		${GTK3_INCLUDE_DIRS}
+ 	)
+-	target_link_libraries(ui.ndll ${GTK2_LIBRARIES})
++	target_link_libraries(ui.ndll ${GTK3_LIBRARIES})
+ endif()
+ 
+ set_target_properties(ui.ndll
+diff --git a/libs/ui/ui.c b/libs/ui/ui.c
+index 334567e..3d8c298 100644
+--- a/libs/ui/ui.c
++++ b/libs/ui/ui.c
+@@ -48,7 +48,7 @@ enum { pFunc = 'func' };
+ 	<h1>UI</h1>
+ 	<p>
+ 	Core native User Interface support. This API uses native WIN32 API on Windows,
+-	Carbon API on OSX, and GTK2 on Linux.
++	Carbon API on OSX, and GTK3 on Linux.
+ 	</p>
+ 	</doc>
+ **/
+@@ -248,7 +248,7 @@ static value ui_sync( value f ) {
+ 	// however the GTK lock mechanism is a LOT slower than
+ 	// using a pthread_mutex
+ 	pthread_mutex_lock(&data.lock);
+-	gtk_timeout_add( 0, onSyncCall, (gpointer)r );
++	gdk_threads_add_timeout( 0, onSyncCall, (gpointer)r );
+ 	pthread_mutex_unlock(&data.lock);
+ #	endif
+ 	return val_null;
+-- 
+2.37.5
+
