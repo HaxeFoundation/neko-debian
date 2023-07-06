@@ -13,7 +13,7 @@ License: public-domain
 
 Files: cmake/FindAPACHE.cmake cmake/FindAPR.cmake
 Copyright: Apache Software Foundation
-License: Apache
+License: Apache-2.0
 
 Files: cmake/FindMariaDBConnector.cmake
 Copyright: 2013-2014, MariaDB Corporation Ab
@@ -24,7 +24,7 @@ Copyright:
  Copyright 2009-2011 Jay Sorg
  Copyright 2015 Thincast Technologies GmbH
  Copyright 2015 DI (FH) Martin Haimberger <martin.haimberger@thincast.com>
-License: Apache
+License: Apache-2.0
 
 Files: cmake/FindPCRE.cmake
 Copyright: 2012, Ting Zhao and Howard Hughes Medical Institute ("HHMI")
@@ -36,7 +36,7 @@ License: Expat
 
 Files: cmake/FindZlib.cmake
 Copyright: 2012, Cloudera Inc.
-License: Apache
+License: Apache-2.0
 
 Files: cmake/LibFindMacros.cmake
 Copyright: 2014, Lasse Kärkkäinen <tronic>
@@ -71,7 +71,7 @@ License: public-domain
  binary, for any purpose, commercial or non-commercial, and by any
  means.
 
-License: Apache
+License: Apache-2.0
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
  You may obtain a copy of the License at
@@ -83,6 +83,9 @@ License: Apache
  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  See the License for the specific language governing permissions and
  limitations under the License.
+ .
+ On Debian systems, the full text of the Apache License, Version 2.0 can be
+ found in the file `/usr/share/common-licenses/Apache-2.0'.
 
 License: GPL-2
  It is free software: you can redistribute it and/or modify it under the terms
