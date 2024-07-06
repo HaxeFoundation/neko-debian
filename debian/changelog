@@ -1,6 +1,7 @@
 neko (2.3.0-3) unstable; urgency=medium
 
   * Add mbedtls3.patch from upstream (Closes: #1075869).
+  * Build-Depends: pkg-config => pkgconf.
   * Bump Standards-Version to 4.7.0 (no changes).
 
  -- Andy Li <andy@onthewings.net>  Sat, 06 Jul 2024 21:09:37 +0100

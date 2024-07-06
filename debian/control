@@ -6,7 +6,7 @@ Standards-Version: 4.7.0
 Build-Depends:
 	debhelper (>= 12~),
 	cmake,
-	pkg-config,
+	pkgconf,
 	git,
 	libgc-dev,
 	dh-apache2,
