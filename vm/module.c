@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2022 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -545,7 +545,7 @@ neko_module *neko_read_module( reader r, readp p, value loader ) {
 		memset(stmp,UNKNOWN,m->codesize+1);
 		if( !vm->trusted_code && !neko_check_stack(m,stmp,0,0,0) ) {
 			free(stmp);
-			ERROR();
+			failure("Stack check failed for global scope");
 		}
 		for(i=0;i<m->nglobals;i++) {
 			vfunction *f = (vfunction*)m->globals[i];
@@ -557,7 +557,7 @@ neko_module *neko_read_module( reader r, readp p, value loader ) {
 				}
 				if( !vm->trusted_code && !neko_check_stack(m,stmp,itmp,f->nargs,f->nargs) ) {
 					free(stmp);
-					ERROR();
+					failure("Stack check failed for function scope");
 				}
 				f->addr = m->code + itmp;
 				prev = itmp;

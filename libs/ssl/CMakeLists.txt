@@ -10,6 +10,7 @@ if (STATIC_MBEDTLS)
 		-DENABLE_PROGRAMS=OFF
 		-DENABLE_TESTING=OFF
 		-DUSE_STATIC_MBEDTLS_LIBRARY=ON
+		-DMBEDTLS_USER_CONFIG_FILE=${CMAKE_CURRENT_SOURCE_DIR}/mbedtls_config.h
 	)
 	if (UNIX)
 		list(APPEND MBEDTLS_CMAKE_ARGS
@@ -25,7 +26,7 @@ if (STATIC_MBEDTLS)
 			${CMAKE_BINARY_DIR}/libs/src/MbedTLS-build/library/${CMAKE_CFG_INTDIR}/mbedtls.lib
 			${CMAKE_BINARY_DIR}/libs/src/MbedTLS-build/library/${CMAKE_CFG_INTDIR}/mbedcrypto.lib
 		)
-		target_link_libraries(ssl.ndll ws2_32 Advapi32 Crypt32)
+		target_link_libraries(ssl.ndll ws2_32 Advapi32 Crypt32 bcrypt)
 	else()
 		set(MBEDTLS_LIBRARIES
 			${CMAKE_BINARY_DIR}/libs/src/MbedTLS-build/library/libmbedx509.a
@@ -35,19 +36,19 @@ if (STATIC_MBEDTLS)
 	endif()
 	ExternalProject_Add(MbedTLS
 		${EP_CONFIGS}
-		URL https://tls.mbed.org/download/mbedtls-2.13.0-apache.tgz
-		URL_MD5 659d96bb03012ca6db414a9137fcdbd6
+		URL https://github.com/Mbed-TLS/mbedtls/releases/download/v3.6.0/mbedtls-3.6.0.tar.bz2
+		URL_HASH SHA256=3ecf94fcfdaacafb757786a01b7538a61750ebd85c4b024f56ff8ba1490fcd38
 		CMAKE_ARGS ${MBEDTLS_CMAKE_ARGS}
 		PATCH_COMMAND ${CMAKE_COMMAND} -Dsource=${CMAKE_SOURCE_DIR} -DMbedTLS_source=${CMAKE_BINARY_DIR}/libs/src/MbedTLS -P ${CMAKE_SOURCE_DIR}/cmake/patch_mbedtls.cmake
 		INSTALL_COMMAND echo skip install
-		BYPRODUCTS ${MBEDTLS_LIBRARIES}
+		BUILD_BYPRODUCTS ${MBEDTLS_LIBRARIES}
 	)
 	set_target_properties(MbedTLS PROPERTIES ${EP_PROPS})
 	set(MBEDTLS_INCLUDE_DIR ${CMAKE_BINARY_DIR}/libs/src/MbedTLS/include)
 
 	add_dependencies(ssl.ndll MbedTLS)
 	# Download project for fat source archive
-	add_dependencies(download_static_deps MbedTLS-download)
+	add_dependencies(download_deps MbedTLS-download)
 else()
 	find_package(MbedTLS REQUIRED)
 endif()
@@ -55,6 +56,11 @@ endif()
 target_include_directories(ssl.ndll
 	PRIVATE
 	${MBEDTLS_INCLUDE_DIR}
+)
+
+target_compile_definitions(ssl.ndll
+	PRIVATE
+	-DMBEDTLS_USER_CONFIG_FILE="${CMAKE_CURRENT_SOURCE_DIR}/mbedtls_config.h"
 )
 
 if(APPLE)
