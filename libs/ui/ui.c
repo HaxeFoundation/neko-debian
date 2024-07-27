@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2022 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -36,6 +36,8 @@
 #	define UIEvent		0xFFFFAA00
 #	define eCall		0x0
 enum { pFunc = 'func' };
+extern void RunApplicationEventLoop(void);
+extern void QuitApplicationEventLoop(void);
 #else
 #	include <gtk/gtk.h>
 #	include <glib.h>
@@ -48,7 +50,7 @@ enum { pFunc = 'func' };
 	<h1>UI</h1>
 	<p>
 	Core native User Interface support. This API uses native WIN32 API on Windows,
-	Carbon API on OSX, and GTK2 on Linux.
+	Carbon API on OSX, and GTK3 on Linux.
 	</p>
 	</doc>
 **/
@@ -248,7 +250,7 @@ static value ui_sync( value f ) {
 	// however the GTK lock mechanism is a LOT slower than
 	// using a pthread_mutex
 	pthread_mutex_lock(&data.lock);
-	gtk_timeout_add( 0, onSyncCall, (gpointer)r );
+	gdk_threads_add_timeout( 0, onSyncCall, (gpointer)r );
 	pthread_mutex_unlock(&data.lock);
 #	endif
 	return val_null;

@@ -2,15 +2,21 @@
 
 [![Build Status](https://dev.azure.com/HaxeFoundation/GitHubPublic/_apis/build/status/HaxeFoundation.neko?branchName=master)](https://dev.azure.com/HaxeFoundation/GitHubPublic/_build/latest?definitionId=2&branchName=master)
 
+# Deprecated as of 2021-09-09
+
+**Neko is not actively maintained anymore.**
+
+We keep it compatible with existing Haxe standard library and Haxe language features. But don't expect any new features in Neko itself and don't expect implementation of any new Haxe standard library API.
+
 # Neko Virtual Machine
 
-See http://nekovm.org/
+See https://nekovm.org/
 
 ## Snapshot Builds
 
 Compiled binaries can be found in the "artifacts" link in the summary section of each [Azure Pipelines build](https://dev.azure.com/HaxeFoundation/GitHubPublic/_build?definitionId=2&_a=summary&repositoryFilter=2&branchFilter=14&statusFilter=succeeded).
 
-For macOS, Neko snapshot of the latest master branch can be built using [homebrew](http://brew.sh/) in a single command: `brew install neko --HEAD`. It will install required dependencies, build, and install Neko to the system. The binaries can be found at `brew --prefix neko`. Use `brew reinstall neko --HEAD` to upgrade in the future.
+For macOS, Neko snapshot of the latest master branch can be built using [homebrew](https://brew.sh/) in a single command: `brew install neko --HEAD`. It will install required dependencies, build, and install Neko to the system. The binaries can be found at `brew --prefix neko`. Use `brew reinstall neko --HEAD` to upgrade in the future.
 
 Ubuntu users can use the [Haxe Foundation snapshots PPA](https://launchpad.net/~haxe/+archive/ubuntu/snapshots) to install a Neko package built from the latest master branch. To do so, run the commands as follows:
 ```
@@ -25,7 +31,7 @@ Users of other Linux/FreeBSD distributions should build Neko from source. See be
 
 Neko can be built using CMake (version 3.x is recommended) and one of the C compilers listed as follows:
 
- * Windows: Visual Studio 2010 / 2013 / 2015 / 2017 
+ * Windows: Visual Studio 2010 / 2013 / 2015 / 2017
  * Mac: XCode (with its "Command line tools")
  * Linux: gcc (can be obtained by installing the "build-essential" Debian/Ubuntu package)
 
@@ -35,15 +41,15 @@ Neko needs to link with various third-party libraries, which are summarized as f
 |-----------------------------------------|-------------|-----------------------------------------------------------|
 | Boehm GC                                | all         | libgc-dev                                                 |
 | OpenSSL                                 | all         | libssl-dev                                                |
-| PCRE                                    | all         | libpcre3-dev                                              |
+| pcre2                                   | all         | libpcre2-dev                                              |
 | zlib                                    | all         | zlib1g-dev                                                |
 | Apache 2.2 / 2.4, with apr and apr-util | all         | apache2-dev                                               |
 | MariaDB / MySQL (Connector/C)           | all         | libmariadb-client-lgpl-dev-compat (or libmysqlclient-dev) |
 | SQLite                                  | all         | libsqlite3-dev                                            |
 | mbed TLS                                | all         | libmbedtls-dev                                            |
-| GTK+2                                   | Linux       | libgtk2.0-dev                                             |
+| GTK+3                                   | Linux       | libgtk-3-dev                                              |
 
-On Windows, CMake will automatically download and build the libraries in the build folder during the build process. However, you need to install [Perl](http://www.activestate.com/activeperl) manually because OpenSSL needs it for configuration. On Mac/Linux, you should install the libraries manually to your system before building Neko, or use the `STATIC_DEPS` CMake option, which will be explained in [CMake options](#cmake-options).
+On Windows, CMake will automatically download and build the libraries in the build folder during the build process. However, you need to install [Perl](https://www.activestate.com/activeperl) manually because OpenSSL needs it for configuration. On Mac/Linux, you should install the libraries manually to your system before building Neko, or use the `STATIC_DEPS` CMake option, which will be explained in [CMake options](#cmake-options).
 
 ### Building on Mac/Linux
 
@@ -73,7 +79,7 @@ You may use the CMake GUI and Visual Studio to build it instead.
 mkdir build
 cd build
 
-# run cmake specifying the visual studio version you need 
+# run cmake specifying the visual studio version you need
 # Visual Studio 12 2013, Visual Studio 14 2015, Visual Studio 15 2017
 # you can additionally specify platform via -A switch (x86, x64)
 cmake -G "Visual Studio 12 2013" ..
@@ -99,7 +105,7 @@ cmake "-Doption=value" ..
 Settings that allow to exclude libraries and their dependencies from the build; available on all platforms. By default all are `ON`:
 
 - `WITH_REGEXP` - Build Perl-compatible regex support
-- `WITH_UI` - Build GTK-2 UI support
+- `WITH_UI` - Build GTK-3 UI support
 - `WITH_SSL` - Build SSL support
 - `WITH_MYSQL` - Build MySQL support
 - `WITH_SQLITE` - Build Sqlite support
@@ -109,11 +115,11 @@ Settings that allow to exclude libraries and their dependencies from the build; 
 
 Default value: `all` for Windows, `none` otherwise
 
-It defines the dependencies that should be linked statically. Can be `all`, `none`, or a list of library names (e.g. `BoehmGC;Zlib;OpenSSL;MariaDBConnector;PCRE;Sqlite3;APR;APRutil;Apache;MbedTLS`).
+It defines the dependencies that should be linked statically. Can be `all`, `none`, or a list of library names (e.g. `BoehmGC;Zlib;OpenSSL;MariaDBConnector;pcre2;SQLite3;APR;APRutil;Apache;MbedTLS`).
 
 CMake will automatically download and build the specified dependencies into the build folder. If a library is not present in this list, it should be installed manually, and it will be linked dynamically.
 
-All third-party libraries, except GTK+2 (Linux), can be linked statically. We do not support statically linking GTK+2 due to the difficulty of building it and its own dependencies.
+All third-party libraries, except GTK+3 (Linux) and BoehmGC on Windows, can be linked statically. We do not support statically linking GTK+3 due to the difficulty of building it and its own dependencies. Additionally, we do not support statically linking the BoehmGC library on Windows systems.
 
 #### `RELOCATABLE`
 

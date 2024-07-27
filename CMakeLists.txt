@@ -1,12 +1,18 @@
-cmake_minimum_required(VERSION 2.8.12)
+cmake_minimum_required(VERSION 3.10.2)
+
+if (${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.24)
+	cmake_policy(VERSION 3.24)
+elseif (${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.19)
+	cmake_policy(VERSION 3.19)
+endif()
+
+project(Neko C)
 
 include(GNUInstallDirs)
 include(CheckCCompilerFlag)
 include(CheckIncludeFile)
 include(TestBigEndian)
-project(Neko C)
 
-set(CMAKE_OSX_ARCHITECTURES x86_64)
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake ${CMAKE_MODULE_PATH})
 
 if (${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")
@@ -22,7 +28,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${OUTPUT_DIR})
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${OUTPUT_DIR})
 
 # avoid the extra "Debug", "Release" directories
-# http://stackoverflow.com/questions/7747857/in-cmake-how-do-i-work-around-the-debug-and-release-directories-visual-studio-2
+# https://stackoverflow.com/questions/7747857/in-cmake-how-do-i-work-around-the-debug-and-release-directories-visual-studio-2
 foreach( OUTPUTCONFIG ${CMAKE_CONFIGURATION_TYPES} )
 	string( TOUPPER ${OUTPUTCONFIG} OUTPUTCONFIG )
 	set( CMAKE_RUNTIME_OUTPUT_DIRECTORY_${OUTPUTCONFIG} ${OUTPUT_DIR} )
@@ -36,39 +42,33 @@ if(IS_ABSOLUTE ${CMAKE_INSTALL_LIBDIR})
 endif()
 
 set(NEKO_VERSION_MAJOR 2)
-set(NEKO_VERSION_MINOR 3)
+set(NEKO_VERSION_MINOR 4)
 set(NEKO_VERSION_PATCH 0)
-set(NEKO_VERSION ${NEKO_VERSION_MAJOR}.${NEKO_VERSION_MINOR}.${NEKO_VERSION_PATCH})
+
+string(TIMESTAMP NEKO_BUILD_YEAR "%Y")
+
+# NEKO_VERSION is cached such that we can query it by `cmake -L -N -B . | grep NEKO_VERSION`
+set(NEKO_VERSION ${NEKO_VERSION_MAJOR}.${NEKO_VERSION_MINOR}.${NEKO_VERSION_PATCH} CACHE STRING INTERNAL)
 
 # Determine target endianness
 TEST_BIG_ENDIAN(NEKO_BIG_ENDIAN)
 
-option(WITH_REGEXP "Build Perl-compatible regex support." ON)
-option(WITH_UI "Build GTK-2 UI support." ON)
-option(WITH_SSL "Build SSL support." ON)
-option(WITH_MYSQL "Build MySQL support." ON)
-option(WITH_SQLITE "Build Sqlite support." ON)
-option(WITH_APACHE "Build Apach modules." ON)
+option(WITH_REGEXP "Build with Perl-compatible regex support." ON)
+option(WITH_UI "Build with GTK-3 UI support." ON)
+option(WITH_SSL "Build with SSL support." ON)
+option(WITH_MYSQL "Build with MySQL support." ON)
+option(WITH_SQLITE "Build with SQLite support." ON)
+option(WITH_APACHE "Build with Apache modules." ON)
 option(WITH_NEKOML "Build NekoML." ON)
 
 # Process common headers in libraries
 # TODO libraries should not be built from this file, but rather by traversing the tree using add_subdirectory
 #add_subdirectory(libs)
 
-if (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
-	if (${CMAKE_OSX_ARCHITECTURES} STREQUAL "i386")
-		set(arch_64 "")
-	elseif (${CMAKE_OSX_ARCHITECTURES} STREQUAL "x86_64")
-		set(arch_64 "64")
-	else()
-		message( FATAL_ERROR "CMAKE_OSX_ARCHITECTURES should be i386 or x86_64." )
-	endif()
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+	set(arch_64 "64")
 else()
-	if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-		set(arch_64 "64")
-	else()
-		set(arch_64 "")
-	endif()
+	set(arch_64 "")
 endif()
 
 if(WIN32)
@@ -82,7 +82,7 @@ endif()
 
 if(APPLE AND STATIC_DEPS STREQUAL "all")
 	if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)
-		set(CMAKE_OSX_DEPLOYMENT_TARGET "10.9" CACHE STRING "CMAKE_OSX_DEPLOYMENT_TARGET" FORCE)
+		set(CMAKE_OSX_DEPLOYMENT_TARGET "11" CACHE STRING "CMAKE_OSX_DEPLOYMENT_TARGET" FORCE)
 	endif()
 endif()
 
@@ -101,8 +101,8 @@ set(external_deps
 	Zlib
 	OpenSSL
 	MariaDBConnector
-	PCRE
-	Sqlite3
+	pcre2
+	SQLite3
 	APR
 	APRutil
 	Apache
@@ -126,18 +126,24 @@ set(STATIC_DEPS ${STATIC_DEPS_DEFAULT} CACHE STRING "${STATIC_DEPS_DOC}")
 
 # Validate STATIC_DEPS
 if (STATIC_DEPS STREQUAL "all")
-	set(STATIC_DEPS ${external_deps} CACHE STRING "${STATIC_DEPS_DOC}" FORCE)
+	set(STATIC_DEPS_ALL ${external_deps})
+	if (WIN32)
+		list(REMOVE_ITEM STATIC_DEPS_ALL BoehmGC)
+	endif()
+	set(STATIC_DEPS ${STATIC_DEPS_ALL} CACHE STRING "${STATIC_DEPS_DOC}" FORCE)
 elseif (STATIC_DEPS STREQUAL "none")
 	message(STATUS "set STATIC_DEPS to nothing")
 	set(STATIC_DEPS CACHE STRING "${STATIC_DEPS_DOC}" FORCE)
+else()
+	foreach(dep ${STATIC_DEPS})
+		list(FIND external_deps ${dep} idx)
+		if(idx EQUAL -1)
+			message(FATAL_ERROR "Invalid STATIC_DEPS. There is no ${dep} in the list of ${external_deps}")
+		elseif(WIN32 AND dep STREQUAL "BoehmGC")
+			message(FATAL_ERROR "Cannot link ${dep} statically on Windows")
+		endif()
+	endforeach()
 endif()
-
-foreach(dep ${STATIC_DEPS})
-	list(FIND external_deps ${dep} idx)
-	if(idx EQUAL -1)
-		message(FATAL_ERROR "Invalid STATIC_DEPS. There is no ${dep} in the list of ${external_deps}")
-	endif()
-endforeach()
 
 # Set STATIC_* variables according to STATIC_DEPS.
 foreach(dep ${external_deps})
@@ -152,22 +158,18 @@ endforeach()
 
 include(ExternalProject)
 
-
-# CMAKE_BUILD_WITH_INSTALL_RPATH should be set to true.
-# It is because `nekotools boot` will use the neko in build dir during build.
-set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
-
 if (RELOCATABLE)
-	# https://cmake.org/Wiki/CMake_RPATH_handling
-	set(CMAKE_SKIP_BUILD_RPATH FALSE)
-	set(CMAKE_SKIP_INSTALL_RPATH FALSE)
+	# https://gitlab.kitware.com/cmake/community/-/wikis/doc/cmake/RPATH-handling
+	# Set this to true, otherwise the binaries won't be relocatable until after installation:
+	set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
 	if(APPLE)
-		set(CMAKE_MACOSX_RPATH TRUE)
 		set(CMAKE_INSTALL_RPATH @executable_path/)
 	elseif(UNIX)
 		set(CMAKE_INSTALL_RPATH \$ORIGIN)
 	endif()
 endif()
+
+list(APPEND CMAKE_INSTALL_RPATH ${CMAKE_INSTALL_FULL_LIBDIR})
 
 if(UNIX AND NOT APPLE)
 	add_definitions(-DABI_ELF)
@@ -208,18 +210,17 @@ set(EP_CONFIGS
 	PREFIX ${CMAKE_BINARY_DIR}/libs
 	DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/libs/download
 )
-if(NOT ${CMAKE_VERSION} VERSION_LESS 3.1)
-	list(APPEND EP_CONFIGS
-		DOWNLOAD_NO_PROGRESS 1
-	)
-endif()
-if(${CMAKE_VERSION} VERSION_LESS 3.2)
-	list(APPEND EP_CONFIGS
-		STEP_TARGETS download
-	)
-else()
+list(APPEND EP_CONFIGS
+	DOWNLOAD_NO_PROGRESS 1
+)
+if (${CMAKE_VERSION} VERSION_LESS 3.19)
 	list(APPEND EP_CONFIGS
 		INDEPENDENT_STEP_TARGETS download
+	)
+else()
+	# download is independent by default in 3.19
+	list(APPEND EP_CONFIGS
+		STEP_TARGETS download
 	)
 endif()
 set(EP_PROPS
@@ -260,48 +261,45 @@ add_executable(nekovm
 	vm/main.c
 )
 
-if (STATIC_BOEHMGC)
+# We need to build from source on Windows regardless
+if (STATIC_BOEHMGC OR WIN32)
 	ExternalProject_Add(libatomic_ops
 		${EP_CONFIGS}
-		URL https://github.com/ivmai/libatomic_ops/releases/download/v7.6.0/libatomic_ops-7.6.0.tar.gz
-		URL_MD5 4d4cd729e55fafb56d48f667c3e46331
+		URL https://github.com/ivmai/libatomic_ops/releases/download/v7.6.14/libatomic_ops-7.6.14.tar.gz
+		URL_MD5 ee8251f5091b7938d18be4dda843a515
 		CONFIGURE_COMMAND echo skip config
 		BUILD_COMMAND echo skip build
 		INSTALL_COMMAND echo skip install
 	)
-
-	set(BoehmGC_URL "http://www.hboehm.info/gc/gc_source/gc-7.6.0.tar.gz")
-	if (NOT ${CMAKE_VERSION} VERSION_LESS 3.7)
-		list(APPEND BoehmGC_URL
-			"https://github.com/ivmai/bdwgc/files/1005477/gc-7.6.0.tar.gz"
-		)
-	endif()
+	set_target_properties(libatomic_ops PROPERTIES ${EP_PROPS})
 
 	set (
 		BoehmGC_CONFIGS
 		DEPENDS libatomic_ops
-		URL ${BoehmGC_URL}
-		URL_MD5 bf46ccbdaccfa3186c2ab87191c8855a
+		URL https://github.com/ivmai/bdwgc/releases/download/v7.6.16/gc-7.6.16.tar.gz
+		URL_MD5 74fb76b6bccf0874cec65b794535a7dd
 	)
 
+	set(GC_INCLUDE_DIR ${CMAKE_BINARY_DIR}/libs/src/BoehmGC-build/include)
+
 	if (WIN32)
+		set(GC_LIBRARIES
+			${CMAKE_BINARY_DIR}/libs/src/BoehmGC-build/${CMAKE_CFG_INTDIR}/gcmt-dll.lib
+		)
 		ExternalProject_Add(BoehmGC
 			${EP_CONFIGS}
 			${BoehmGC_CONFIGS}
 			CMAKE_ARGS
 				-Wno-dev
 				-Denable_threads=ON
-				-Denable_parallel_mark=ON
+				-Denable_parallel_mark=OFF
 				-DCMAKE_USE_WIN32_THREADS_INIT=ON
+				-DCMAKE_CXX_STANDARD=14
 			PATCH_COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_BINARY_DIR}/libs/src/libatomic_ops ${CMAKE_BINARY_DIR}/libs/src/BoehmGC/libatomic_ops
 			INSTALL_COMMAND
 				${CMAKE_COMMAND} -E copy_directory
 					${CMAKE_BINARY_DIR}/libs/src/BoehmGC/include
 					${CMAKE_BINARY_DIR}/libs/src/BoehmGC-build/include/gc
-		)
-		set(GC_INCLUDE_DIR ${CMAKE_BINARY_DIR}/libs/src/BoehmGC-build/include)
-		set(GC_LIBRARIES
-			${CMAKE_BINARY_DIR}/libs/src/BoehmGC-build/${CMAKE_CFG_INTDIR}/gcmt-dll.lib
 		)
 		add_custom_command(OUTPUT ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/gcmt-dll.dll
 			DEPENDS BoehmGC
@@ -318,7 +316,6 @@ if (STATIC_BOEHMGC)
 			set(GC_CFLAGS "-w")
 		endif()
 
-		set(GC_INCLUDE_DIR ${CMAKE_BINARY_DIR}/libs/src/BoehmGC-build/include)
 		set(GC_LIBRARIES
 			${CMAKE_BINARY_DIR}/libs/src/BoehmGC-build/lib/libgc.a
 		)
@@ -343,15 +340,18 @@ if (STATIC_BOEHMGC)
 			BYPRODUCTS
 				${GC_LIBRARIES}
 		)
-
-		# don't want to add libatomic_ops to external_deps,
-		# but want download_static_deps depends on it
-		add_dependencies(BoehmGC-download libatomic_ops-download)
 	endif()
+
 	set_target_properties(BoehmGC PROPERTIES ${EP_PROPS})
 	add_dependencies(libneko BoehmGC)
 else()
 	find_package(BoehmGC REQUIRED)
+endif()
+
+add_custom_target(download_deps)
+if (STATIC_BOEHMGC OR WIN32)
+	add_dependencies(download_deps libatomic_ops-download)
+	add_dependencies(download_deps BoehmGC-download)
 endif()
 
 target_include_directories(libneko PRIVATE ${GC_INCLUDE_DIR})
@@ -389,12 +389,9 @@ set_target_properties(libneko
 if (CMAKE_HOST_WIN32)
 	set(set_neko_env set NEKOPATH=${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
 	set(neko_exec $<TARGET_FILE:nekovm>)
-elseif(CMAKE_HOST_APPLE)
-	set(set_neko_env "")
-	set(neko_exec DYLD_FALLBACK_LIBRARY_PATH=${CMAKE_RUNTIME_OUTPUT_DIRECTORY} NEKOPATH=${CMAKE_RUNTIME_OUTPUT_DIRECTORY} $<TARGET_FILE:nekovm>)
 else()
 	set(set_neko_env "")
-	set(neko_exec LD_LIBRARY_PATH=${CMAKE_RUNTIME_OUTPUT_DIRECTORY} NEKOPATH=${CMAKE_RUNTIME_OUTPUT_DIRECTORY} $<TARGET_FILE:nekovm>)
+	set(neko_exec NEKOPATH=${CMAKE_RUNTIME_OUTPUT_DIRECTORY} $<TARGET_FILE:nekovm>)
 endif()
 
 file(GLOB compilers_src
@@ -517,13 +514,6 @@ endif()
 
 #######################
 
-add_custom_target(download_static_deps)
-if (STATIC_BOEHMGC)
-	add_dependencies(download_static_deps BoehmGC-download)
-endif()
-
-#######################
-
 # source_archive
 # We create our own source package target instead of using CPack's package_source.
 # One reason is that the CPack VS generator doesn't generate package_source target.
@@ -564,7 +554,7 @@ add_custom_command(OUTPUT ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${source_archive_fat
 		-Dsrc_dir=${CMAKE_SOURCE_DIR}
 		-Dlib_src_dir=libs/src
 		-P ${CMAKE_SOURCE_DIR}/cmake/source_archive_fat.cmake
-	DEPENDS source_archive download_static_deps
+	DEPENDS source_archive download_deps
 	VERBATIM
 )
 
@@ -645,6 +635,7 @@ export(TARGETS
 if (WITH_NEKOML)
 	export(TARGETS
 		nekoml
+		APPEND
 		FILE "${CMAKE_BINARY_DIR}/NekoTargets.cmake")
 endif()
 
@@ -735,22 +726,6 @@ else()
 	set(bin_archive_format tar.gz)
 endif()
 
-if (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
-	if (${CMAKE_OSX_ARCHITECTURES} STREQUAL "i386")
-		set(arch_64 "")
-	elseif (${CMAKE_OSX_ARCHITECTURES} STREQUAL "x86_64")
-		set(arch_64 "64")
-	else()
-		message( FATAL_ERROR "CMAKE_OSX_ARCHITECTURES should be i386 or x86_64." )
-	endif()
-else()
-	if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-		set(arch_64 "64")
-	else()
-		set(arch_64 "")
-	endif()
-endif()
-
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
 	set(OS_NAME "win")
 elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
@@ -764,7 +739,13 @@ else()
 	set(OS_NAME "")
 endif()
 
-set(bin_archive_name_we "neko-${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}-${OS_NAME}${arch_64}")
+if (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "arm64" OR ${CMAKE_SYSTEM_PROCESSOR} STREQUAL "aarch64")
+	set(arch_suffix "-arm64")
+else()
+	set(arch_suffix ${arch_64})
+endif()
+
+set(bin_archive_name_we "neko-${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}-${OS_NAME}${arch_suffix}")
 set(bin_archive_name "${bin_archive_name_we}.${bin_archive_format}")
 set(CPACK_PACKAGE_FILE_NAME ${bin_archive_name_we})
 # set(CPACK_SOURCE_PACKAGE_FILE_NAME
@@ -797,25 +778,12 @@ if (WITH_NEKOML)
 		COMMAND nekoml
 		WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
 	)
-
-	set_tests_properties(nekoml
-		PROPERTIES
-		ENVIRONMENT LD_LIBRARY_PATH=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
-	)
 endif()
 
 add_test(NAME nekotools
 	COMMAND nekotools
 	WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
 )
-
-if (UNIX AND NOT APPLE)
-	set_tests_properties(-version test.n nekoc nekotools
-		PROPERTIES
-		ENVIRONMENT LD_LIBRARY_PATH=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
-	)
-endif()
-
 
 #######################
 

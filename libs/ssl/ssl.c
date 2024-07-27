@@ -16,7 +16,10 @@ typedef int SOCKET;
 #endif
 
 #ifdef NEKO_MAC
-#include <Security/Security.h>
+#include <CoreFoundation/CoreFoundation.h>
+#include <Security/SecKeychain.h>
+#include <Security/SecItem.h>
+#include <Security/SecCertificate.h>
 #endif
 
 #define SOCKET_ERROR (-1)
@@ -31,7 +34,10 @@ typedef int SOCKET;
 #include "mbedtls/oid.h"
 #include "mbedtls/x509_crt.h"
 #include "mbedtls/ssl.h"
-#include "mbedtls/net.h"
+
+#ifdef MBEDTLS_PSA_CRYPTO_C
+#include <psa/crypto.h>
+#endif
 
 #define val_ssl(o)	(mbedtls_ssl_context*)val_data(o)
 #define val_conf(o)	(mbedtls_ssl_config*)val_data(o)
@@ -222,7 +228,7 @@ static value ssl_recv_char(value ssl) {
 	val_check_kind(ssl,k_ssl);
 	r = mbedtls_ssl_read( val_ssl(ssl), &c, 1 );
 	if( r <= 0 )
-		neko_error();
+		ssl_error(r);
 	return alloc_int( c );
 }
 
@@ -242,10 +248,15 @@ static value ssl_recv( value ssl, value data, value pos, value len ) {
 		HANDLE_EINTR(recv_again);
 		return block_error();
 	}
-	if( dlen == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY )
+	if (dlen == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY
+		|| dlen == MBEDTLS_ERR_SSL_WANT_READ
+	#ifdef MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET
+		|| dlen == MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET
+	#endif
+	)
 		return alloc_int(0);
 	if( dlen < 0 )
-		neko_error();
+		ssl_error(dlen);
 	return alloc_int( dlen );
 }
 
@@ -264,7 +275,11 @@ static  value ssl_read( value ssl ) {
 			HANDLE_EINTR(read_again);
 			return block_error();
 		}
-		if( len == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY )
+		if( len == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY || len == MBEDTLS_ERR_SSL_WANT_READ
+#ifdef MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET
+		|| len == MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET
+#endif
+		)
 			break;
 		if( len == 0 )
 			break;
@@ -505,7 +520,11 @@ static value cert_get_altnames( value cert ){
 	value l = NULL, first = NULL;
 	val_check_kind(cert, k_cert);
 	crt = val_cert(cert);
+#if MBEDTLS_VERSION_MAJOR >= 3
+	if( mbedtls_x509_crt_has_ext_type( crt, MBEDTLS_X509_EXT_SUBJECT_ALT_NAME ) ){
+#else
 	if( crt->ext_types & MBEDTLS_X509_EXT_SUBJECT_ALT_NAME ){
+#endif
 		cur = &crt->subject_alt_names;
 
 		while( cur != NULL ){
@@ -624,7 +643,11 @@ static value key_from_der( value data, value pub ){
 	if( val_bool(pub) )
 		r = mbedtls_pk_parse_public_key( pk, (const unsigned char*)val_string(data), val_strlen(data) );
 	else
+#if MBEDTLS_VERSION_MAJOR >= 3
+		r = mbedtls_pk_parse_key( pk, (const unsigned char*)val_string(data), val_strlen(data), NULL, 0, mbedtls_ctr_drbg_random, &ctr_drbg );
+#else
 		r = mbedtls_pk_parse_key( pk, (const unsigned char*)val_string(data), val_strlen(data), NULL, 0 );
+#endif
 	if( r != 0 ){
 		mbedtls_pk_free(pk);
 		return ssl_error(r);
@@ -650,10 +673,17 @@ static value key_from_pem(value data, value pub, value pass){
 	mbedtls_pk_init(pk);
 	if( val_bool(pub) )
 		r = mbedtls_pk_parse_public_key( pk, buf, len );
+#if MBEDTLS_VERSION_MAJOR >= 3
+	else if( val_is_null(pass) )
+		r = mbedtls_pk_parse_key( pk, buf, len, NULL, 0, mbedtls_ctr_drbg_random, &ctr_drbg );
+	else
+		r = mbedtls_pk_parse_key( pk, buf, len, (const unsigned char*)val_string(pass), val_strlen(pass), mbedtls_ctr_drbg_random, &ctr_drbg );
+#else
 	else if( val_is_null(pass) )
 		r = mbedtls_pk_parse_key( pk, buf, len, NULL, 0 );
 	else
 		r = mbedtls_pk_parse_key( pk, buf, len, (const unsigned char*)val_string(pass), val_strlen(pass) );
+#endif
 	if( r != 0 ){
 		mbedtls_pk_free(pk);
 		return ssl_error(r);
@@ -703,9 +733,17 @@ static value dgst_sign(value data, value key, value alg){
 	if( (r = mbedtls_md( md, (const unsigned char *)val_string(data), val_strlen(data), hash )) != 0 )
 		return ssl_error(r);
 
+#if MBEDTLS_VERSION_MAJOR >= 3
+	out = alloc_empty_string(MBEDTLS_PK_SIGNATURE_MAX_SIZE);
+#else
 	out = alloc_empty_string(MBEDTLS_MPI_MAX_SIZE);
+#endif
 	buf = (unsigned char *)val_string(out);
+#if MBEDTLS_VERSION_MAJOR >= 3
+	if( (r = mbedtls_pk_sign( val_pkey(key), mbedtls_md_get_type(md), hash, mbedtls_md_get_size(md), buf, MBEDTLS_PK_SIGNATURE_MAX_SIZE, &olen, mbedtls_ctr_drbg_random, &ctr_drbg )) != 0 )
+#else
 	if( (r = mbedtls_pk_sign( val_pkey(key), mbedtls_md_get_type(md), hash, 0, buf, &olen, mbedtls_ctr_drbg_random, &ctr_drbg )) != 0 )
+#endif
 		return ssl_error(r);
 
 	buf[olen] = 0;
@@ -782,6 +820,10 @@ void ssl_main() {
 	mbedtls_entropy_init( &entropy );
 	mbedtls_ctr_drbg_init( &ctr_drbg );
 	mbedtls_ctr_drbg_seed( &ctr_drbg, mbedtls_entropy_func, &entropy, NULL, 0 );
+
+#ifdef MBEDTLS_PSA_CRYPTO_C
+	psa_crypto_init();
+#endif
 }
 
 DEFINE_PRIM( ssl_new, 1 );
