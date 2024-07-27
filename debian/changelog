@@ -1,3 +1,13 @@
+neko (2.4.0-1) unstable; urgency=medium
+
+  * New upstream version.
+  * Removed patches applied to upstream.
+    + pcre2.patch
+    + gtk3.patch
+    + mbedtls3.patch
+
+ -- Andy Li <andy@onthewings.net>  Sat, 27 Jul 2024 19:33:48 +0100
+
 neko (2.3.0-3) unstable; urgency=medium
 
   * Add mbedtls3.patch from upstream (Closes: #1075869).
