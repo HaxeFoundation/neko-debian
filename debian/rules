@@ -22,6 +22,7 @@ override_dh_auto_configure:
 		-DCMAKE_INSTALL_INCLUDEDIR=include/$(DEB_HOST_MULTIARCH) \
 		-DCMAKE_INSTALL_LIBDIR=lib/$(DEB_HOST_MULTIARCH) \
 		-DRELOCATABLE=OFF \
+		-DCMAKE_SKIP_INSTALL_RPATH=ON \
 		-DRUN_LDCONFIG=OFF
 	echo "LoadModule neko_module /usr/lib/$(DEB_HOST_MULTIARCH)/neko/mod_neko2.ndll" > debian/neko.load
 
