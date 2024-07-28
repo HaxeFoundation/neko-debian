@@ -26,17 +26,13 @@ Copyright:
  Copyright 2015 DI (FH) Martin Haimberger <martin.haimberger@thincast.com>
 License: Apache
 
-Files: cmake/FindPCRE.cmake
-Copyright: 2012, Ting Zhao and Howard Hughes Medical Institute ("HHMI")
+Files: cmake/FindPCRE2.cmake
+Copyright: 2011-2013, Karapetsas Eleftherios
 License: BSD-3-clause
 
-Files: cmake/FindSqlite3.cmake
-Copyright: 2015, Junlong Xie <decimalbell@gmail.com>
-License: Expat
-
-Files: cmake/FindZlib.cmake
-Copyright: 2012, Cloudera Inc.
-License: Apache
+Files: cmake/FindSQLite3.cmake
+Copyright: 2000-2023, Kitware, Inc. and Contributors
+License: BSD-3-clause
 
 Files: cmake/LibFindMacros.cmake
 Copyright: 2014, Lasse Kärkkäinen <tronic>

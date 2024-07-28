@@ -1,11 +1,12 @@
 neko (2.4.0-1) unstable; urgency=medium
 
   * New upstream version.
-  * Removed patches applied to upstream.
+  * Remove patches applied to upstream.
     + pcre2.patch
     + gtk3.patch
     + mbedtls3.patch
   * Add rpath.patch from upstream to avoid adding rpath to binaries.
+  * Update d/copyright.
 
  -- Andy Li <andy@onthewings.net>  Sat, 27 Jul 2024 19:33:48 +0100
 
