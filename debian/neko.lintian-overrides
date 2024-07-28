@@ -1,7 +1,0 @@
-# Lintian overrides for neko.
-#
-# The dynamic modules /usr/lib/neko/*.ndll are not stripped because they
-# are created as concatenations of the virtual machine bootloader and
-# some bytecode, which makes stripping impossible (cf. OCaml Packaging
-# Policy).
-neko binary: unstripped-binary-or-object

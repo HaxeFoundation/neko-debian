@@ -7,6 +7,7 @@ neko (2.4.0-1) unstable; urgency=medium
     + mbedtls3.patch
   * Add rpath.patch from upstream to avoid adding rpath to binaries.
   * Update d/copyright.
+  * Remove unused unstripped-binary-or-object lintian override.
 
  -- Andy Li <andy@onthewings.net>  Sat, 27 Jul 2024 19:33:48 +0100
 
