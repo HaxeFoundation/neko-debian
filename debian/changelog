@@ -1,3 +1,9 @@
+neko (2.4.0-2) unstable; urgency=medium
+
+  * Remove rpath.patch. Use CMAKE_SKIP_INSTALL_RPATH instead.
+
+ -- Andy Li <andy@onthewings.net>  Sun, 18 Aug 2024 04:56:11 +0100
+
 neko (2.4.0-1) unstable; urgency=medium
 
   * New upstream version.
