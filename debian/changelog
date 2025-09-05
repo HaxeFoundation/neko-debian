@@ -1,3 +1,11 @@
+neko (2.4.1-1) unstable; urgency=medium
+
+  * New upstream version.
+    + Do not define bool when compiled with C23. (Closes: #1097443)
+  * Bump Standards-Version to 4.7.2 (no changes).
+
+ -- Andy Li <andy@onthewings.net>  Fri, 05 Sep 2025 01:03:15 +0000
+
 neko (2.4.0-2) unstable; urgency=medium
 
   * Remove rpath.patch. Use CMAKE_SKIP_INSTALL_RPATH instead.
@@ -76,8 +84,8 @@ neko (2.1.0-4) unstable; urgency=medium
 neko (2.1.0-3) unstable; urgency=medium
 
   * Added upstream patches
-    + boot-c-1.diff and boot-c-2.diff: build nekoc, nekoml, and 
-      nekotools with "nekotools boot -c file.n", such that the 
+    + boot-c-1.diff and boot-c-2.diff: build nekoc, nekoml, and
+      nekotools with "nekotools boot -c file.n", such that the
       output will be valid binaries.
     + tests-1.diff and tests-2.diff: add tests that run nekoc,
       nekoml, and nekotools.
@@ -147,7 +155,7 @@ neko (2.0.0-1) unstable; urgency=low
     Closes: #666858.
   * Fix build failure with ld --as-needed. Closes: #641613.
   * Fix some lintian warnings.
-  * TODO: Pass build flags to submodules. 
+  * TODO: Pass build flags to submodules.
 
  -- Matthias Klose <doko@debian.org>  Fri, 05 Jul 2013 14:47:28 +0200
 
@@ -209,7 +217,7 @@ neko (1.8.1-1) unstable; urgency=low
   * Removed obsolete patch tora-pwrite-diversion.diff.
   * Added tora-missing-include.diff to include stdlib.h.
   * Added mysql-missing-include.diff to include stdlib.h.
-    
+
  -- Jens Peter Secher <jps@debian.org>  Tue, 28 Jul 2009 22:32:00 +0200
 
 neko (1.8.0-4) unstable; urgency=low
@@ -232,7 +240,7 @@ neko (1.8.0-3) unstable; urgency=low
 neko (1.8.0-2) unstable; urgency=low
 
   * Promoted libneko to a proper shared library living in /usr/lib.
-    (Closes: #509454)    
+    (Closes: #509454)
   * No need to Build-Conflict with itself because all rpaths have been
     removed.
   * Use quilt instead of dpatch for patches, and describe how to use
@@ -355,7 +363,7 @@ neko (1.5.3-3) unstable; urgency=low
 
   * Fix endianess problem in embedded-code loader.
     (Closes: #412567)
-  
+
  -- Jens Peter Secher <jps@debian.org>  Sat,  3 Mar 2007 11:32:21 +0100
 
 neko (1.5.3-2) unstable; urgency=low
