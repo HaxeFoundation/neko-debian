@@ -81,7 +81,7 @@ static char *executable_path() {
 	if ( _NSGetExecutablePath(path, &path_len) )
 		return NULL;
 	return path;
-#elif defined(NEKO_BSD)
+#elif defined(NEKO_BSD) && defined(KERN_PROC_PATHNAME)
         int mib[4];
         mib[0] = CTL_KERN;
         mib[1] = KERN_PROC;
@@ -340,7 +340,13 @@ int main( int argc, char *argv[] ) {
 	vm = NULL;
 	mload = NULL;
 	neko_vm_select(NULL);
+	#ifdef NEKO_THREADS
+	/* With threads enabled, other threads may crash if globals are freed,
+	   so only do a garbage collection there. */
+	neko_gc_major();
+	#else
 	neko_global_free();
+	#endif
 	return r;
 }
 

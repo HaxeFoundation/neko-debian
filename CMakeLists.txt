@@ -43,7 +43,7 @@ endif()
 
 set(NEKO_VERSION_MAJOR 2)
 set(NEKO_VERSION_MINOR 4)
-set(NEKO_VERSION_PATCH 0)
+set(NEKO_VERSION_PATCH 1)
 
 string(TIMESTAMP NEKO_BUILD_YEAR "%Y")
 
@@ -360,11 +360,8 @@ target_link_libraries(libneko ${GC_LIBRARIES})
 target_link_libraries(nekovm libneko)
 
 if(UNIX)
-	if (NOT ${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")
-		set(DL_LIB "dl")
-	endif()
 	find_package(Threads)
-	target_link_libraries(libneko ${DL_LIB} m ${CMAKE_THREAD_LIBS_INIT})
+	target_link_libraries(libneko ${CMAKE_DL_LIBS} m ${CMAKE_THREAD_LIBS_INIT})
 endif()
 
 set_target_properties(nekovm libneko
